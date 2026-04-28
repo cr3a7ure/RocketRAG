@@ -3,7 +3,13 @@ from .db import MilvusLiteDB
 from .vectors import init_vectorizer
 
 
-def create_mcp_server(db_path: str, collection_name: str, vectorizer_args: dict):
+def create_mcp_server(
+    db_path: str,
+    collection_name: str,
+    vectorizer_args: dict,
+    host: str = "127.0.0.1",
+    port: int = 8000,
+):
     """Create an MCP server for querying the RocketRAG database."""
     vectorizer = init_vectorizer("sentence_transformers", **vectorizer_args)
 
@@ -13,7 +19,12 @@ def create_mcp_server(db_path: str, collection_name: str, vectorizer_args: dict)
         vectorizer=vectorizer,
     )
 
-    mcp = FastMCP("RocketRAG Query Server")
+    mcp = FastMCP(
+        "RocketRAG Query Server",
+        host=host,
+        port=port,
+        streamable_http_path="/mcp",
+    )
 
     @mcp.tool()
     def search(query: str, top_k: int = 5) -> list[dict]:
@@ -26,15 +37,18 @@ def create_mcp_server(db_path: str, collection_name: str, vectorizer_args: dict)
         Returns:
             List of search results with chunk text, filename, and score
         """
-        results = db.search(query, top_k=top_k)
-        return [
-            {
-                "chunk": r.chunk,
-                "filename": r.filename,
-                "score": r.score,
-            }
-            for r in results
-        ]
+        try:
+            results = db.search(query, top_k=top_k)
+            return [
+                {
+                    "chunk": r.chunk,
+                    "filename": r.filename,
+                    "score": r.score,
+                }
+                for r in results
+            ]
+        except Exception as e:
+            return [{"error": str(e), "results": []}]
 
     @mcp.tool()
     def list_files() -> list[str]:
@@ -43,7 +57,10 @@ def create_mcp_server(db_path: str, collection_name: str, vectorizer_args: dict)
         Returns:
             List of unique filenames
         """
-        return db.get_unique_filenames()
+        try:
+            return db.get_unique_filenames()
+        except Exception as e:
+            return [f"error: {str(e)}"]
 
     @mcp.tool()
     def get_file_chunks(filename: str) -> list[dict]:
@@ -55,14 +72,17 @@ def create_mcp_server(db_path: str, collection_name: str, vectorizer_args: dict)
         Returns:
             List of chunks with text and id
         """
-        results = db.get_vectors_by_filename(filename)
-        return [
-            {
-                "id": r["id"],
-                "text": r["text"],
-            }
-            for r in results
-        ]
+        try:
+            results = db.get_vectors_by_filename(filename)
+            return [
+                {
+                    "id": r["id"],
+                    "text": r["text"],
+                }
+                for r in results
+            ]
+        except Exception as e:
+            return [{"error": str(e)}]
 
     @mcp.tool()
     def get_stats() -> dict:
@@ -71,16 +91,19 @@ def create_mcp_server(db_path: str, collection_name: str, vectorizer_args: dict)
         Returns:
             Dictionary with total_chunks, unique_files, dimension, and vectorizer_model
         """
-        total = db.get_total_count()
-        files = db.get_unique_filenames()
-        metadata = db.get_collection_metadata()
+        try:
+            total = db.get_total_count()
+            files = db.get_unique_filenames()
+            metadata = db.get_collection_metadata()
 
-        return {
-            "total_chunks": total,
-            "unique_files": len(files),
-            "dimension": db.dimension,
-            "vectorizer_model": metadata.get("vectorizer_args", {}).get("model_name", "unknown"),
-        }
+            return {
+                "total_chunks": total,
+                "unique_files": len(files),
+                "dimension": db.dimension,
+                "vectorizer_model": metadata.get("vectorizer_args", {}).get("model_name", "unknown"),
+            }
+        except Exception as e:
+            return {"error": str(e)}
 
     @mcp.tool()
     def get_all_chunks(limit: int = 100, offset: int = 0) -> list[dict]:
@@ -93,17 +116,49 @@ def create_mcp_server(db_path: str, collection_name: str, vectorizer_args: dict)
         Returns:
             List of chunks with text and filename
         """
-        results = db.get_all_records(limit=limit, offset=offset)
-        return [
-            {
-                "id": r["id"],
-                "text": r["text"],
-                "filename": r["filename"],
-            }
-            for r in results
-        ]
+        try:
+            results = db.get_all_records(limit=limit, offset=offset)
+            return [
+                {
+                    "id": r["id"],
+                    "text": r["text"],
+                    "filename": r["filename"],
+                }
+                for r in results
+            ]
+        except Exception as e:
+            return [{"error": str(e)}]
 
     return mcp
+
+
+def run_stdio(db_path: str, collection_name: str, vectorizer_args: dict):
+    """Run MCP server with stdio transport."""
+    mcp = create_mcp_server(db_path, collection_name, vectorizer_args)
+    mcp.run(transport="stdio")
+
+
+def run_http(db_path: str, collection_name: str, vectorizer_args: dict, host: str = "127.0.0.1", port: int = 8000):
+    """Run MCP server with HTTP transport via SSE."""
+    import uvicorn
+    from fastapi import FastAPI
+
+    mcp = create_mcp_server(db_path, collection_name, vectorizer_args, host=host, port=port)
+    sse_app = mcp.sse_app()
+
+    app = FastAPI(title="RocketRAG MCP Server")
+
+    @app.get("/")
+    async def root():
+        return {"service": "RocketRAG MCP Server", "version": "1.0"}
+
+    @app.get("/health")
+    async def health():
+        return {"status": "healthy"}
+
+    app.mount("/mcp", sse_app)
+
+    uvicorn.run(app, host=host, port=port)
 
 
 def main():
@@ -120,14 +175,19 @@ def main():
         default='{"model_name": "minishlab/potion-multilingual-128M"}',
         help="JSON string with vectorizer configuration",
     )
+    parser.add_argument("--transport", default="stdio", choices=["stdio", "http"], help="Transport type")
+    parser.add_argument("--host", default="127.0.0.1", help="Host for HTTP transport")
+    parser.add_argument("--port", type=int, default=8000, help="Port for HTTP transport")
 
     args = parser.parse_args()
 
     vectorizer_args = json.loads(args.vectorizer_args)
-    mcp = create_mcp_server(args.db_path, args.collection_name, vectorizer_args)
-
     os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
-    mcp.run(transport="stdio")
+
+    if args.transport == "http":
+        run_http(args.db_path, args.collection_name, vectorizer_args, args.host, args.port)
+    else:
+        run_stdio(args.db_path, args.collection_name, vectorizer_args)
 
 
 if __name__ == "__main__":
