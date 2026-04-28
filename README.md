@@ -70,6 +70,9 @@ rocketrag ask "What are the key findings?"
 
 # Start web server
 rocketrag server --port 8000
+
+# Start MCP server for AI agent integration
+rocketrag mcp-server
 ```
 
 #### Using uvx (no installation required)
@@ -103,7 +106,7 @@ RocketRAG follows a modular, plugin-based architecture:
 
 ### Core Components
 
-- **BaseLoader**: Pluggable document loading (PDF, TXT, MD, etc.)
+- **BaseLoader**: Pluggable document loading (PDF, TXT, MD, YAML, code files, etc.)
 - **BaseChunker**: Configurable chunking strategies (semantic, recursive, etc.)
 - **BaseVectorizer**: Flexible embedding models
 - **BaseLLM**: Swappable language models
@@ -213,6 +216,44 @@ print(result["sources"])
 - 🔄 **Batch processing** for large document sets
 - 📝 **Metadata preservation** throughout the pipeline
 - 🎯 **Context-aware chunking** for better retrieval
+- 🔌 **MCP server** for AI agent integration
+
+## 🤖 MCP Server
+
+RocketRAG includes an MCP (Model Context Protocol) server for integration with AI agents like Claude Desktop:
+
+```bash
+# Start MCP server (stdio transport)
+rocketrag mcp-server
+
+# Or with custom settings
+rocketrag mcp-server --db-path ./rag.db --collection-name docs
+```
+
+### MCP Tools
+
+| Tool | Description |
+|------|-------------|
+| `search(query, top_k)` | Vector similarity search across all chunks |
+| `list_files()` | List all indexed filenames |
+| `get_file_chunks(filename)` | Get all chunks from a specific file |
+| `get_stats()` | Get database statistics |
+| `get_all_chunks(limit, offset)` | Paginated chunk retrieval |
+
+### MCP Client Configuration
+
+Add to your MCP client config (e.g., Claude Desktop):
+
+```json
+{
+  "mcpServers": {
+    "rocketrag": {
+      "command": "uvx",
+      "args": ["rocketrag", "mcp-server"]
+    }
+  }
+}
+```
 
 ## 🛠️ Development
 
