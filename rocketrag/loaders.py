@@ -8,7 +8,7 @@ class KreuzbergLoader(BaseLoader):
     name = "kreuzberg"
     supported_formats = {
         # Documents
-        "pdf", "docx", "doc", "rtf", "txt", "epub",
+        "pdf", "docx", "doc", "rtf", "txt", "epub", "md", "markdown",
         # Images
         "jpg", "jpeg", "png", "tiff", "bmp", "gif", "webp",
         # Spreadsheets
