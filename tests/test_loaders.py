@@ -207,7 +207,7 @@ class TestKreuzbergLoader:
             assert mock_extract.call_count == 4
 
     def test_load_files_from_dir_unsupported_format(self):
-        """Test error handling for unsupported file formats."""
+        """Test that unsupported file formats are skipped without error."""
         loader = KreuzbergLoader()
         
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -215,11 +215,38 @@ class TestKreuzbergLoader:
             unsupported_file = Path(temp_dir, "test.mp4")
             unsupported_file.touch()
             
-            with pytest.raises(ValueError) as exc_info:
-                loader.load_files_from_dir(temp_dir)
+            # Should not raise, just skip with warning
+            documents = loader.load_files_from_dir(temp_dir)
             
-            error_message = str(exc_info.value)
-            assert "Unsupported file format 'mp4' for kreuzberg loader" in error_message
+            assert len(documents) == 0
+
+    def test_load_files_from_dir_skips_multiple_formats(self, capsys):
+        """Test that multiple unsupported formats are skipped and reported."""
+        loader = KreuzbergLoader()
+        
+        with tempfile.TemporaryDirectory() as temp_dir:
+            unsupported_files = ["video.mp4", "audio.mp3", "script.py", "archive.zip"]
+            for filename in unsupported_files:
+                Path(temp_dir, filename).touch()
+            
+            Path(temp_dir, "readme.md").touch()
+            
+            with patch('rocketrag.loaders.extract_file_sync') as mock_extract:
+                mock_result = MagicMock()
+                mock_result.content = "Content"
+                mock_extract.return_value = mock_result
+                
+                documents = loader.load_files_from_dir(temp_dir)
+            
+            assert len(documents) == 1
+            assert documents[0].filename == "readme.md"
+            
+            captured = capsys.readouterr()
+            assert "Skipped 4 unsupported file(s)" in captured.out
+            assert "mp3" in captured.out
+            assert "mp4" in captured.out
+            assert "py" in captured.out
+            assert "zip" in captured.out
 
     def test_load_files_from_dir_skips_directories(self):
         """Test that directories are skipped during file loading."""
@@ -248,24 +275,19 @@ class TestKreuzbergLoader:
 
     @patch('rocketrag.loaders.extract_file_sync')
     def test_load_files_from_dir_extraction_error(self, mock_extract):
-        """Test error handling when file extraction fails."""
-        # Mock extract_file_sync to raise an exception
+        """Test that extraction errors are skipped without error."""
         mock_extract.side_effect = Exception("Extraction failed")
         
         loader = KreuzbergLoader()
         
         with tempfile.TemporaryDirectory() as temp_dir:
-            # Create test file
             test_file = Path(temp_dir, "test.pdf")
             test_file.touch()
             
-            with pytest.raises(ValueError) as exc_info:
-                loader.load_files_from_dir(temp_dir)
+            # Should not raise, just skip with warning
+            documents = loader.load_files_from_dir(temp_dir)
             
-            error_message = str(exc_info.value)
-            assert "Failed to process file 'test.pdf'" in error_message
-            assert "Extraction failed" in error_message
-            assert "unsupported file format or corrupted file" in error_message
+            assert len(documents) == 0
 
 
 class TestInitLoader:
