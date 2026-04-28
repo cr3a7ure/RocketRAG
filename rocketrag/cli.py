@@ -386,13 +386,19 @@ def mcp_server(
         '{"model_name": "minishlab/potion-multilingual-128M"}',
         help="JSON string with vectorizer configuration",
     ),
+    transport: str = typer.Option("stdio", help="Transport type (stdio or http)"),
+    host: str = typer.Option("127.0.0.1", help="Host for HTTP transport"),
+    port: int = typer.Option(8000, help="Port for HTTP transport"),
 ):
     """Start the RocketRAG MCP server for database querying."""
-    from .mcp_server import create_mcp_server
+    from .mcp_server import run_stdio, run_http
 
     vectorizer_args_dict = json.loads(vectorizer_args)
-    mcp = create_mcp_server(db_path, collection_name, vectorizer_args_dict)
-    mcp.run(transport="stdio")
+
+    if transport == "http":
+        run_http(db_path, collection_name, vectorizer_args_dict, host, port)
+    else:
+        run_stdio(db_path, collection_name, vectorizer_args_dict)
 
 
 def main():

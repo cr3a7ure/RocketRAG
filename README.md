@@ -4,15 +4,12 @@
 
 RocketRAG is a high-performance Retrieval-Augmented Generation (RAG) system designed with a focus on speed, simplicity, and extensibility. Built on top of state-of-the-art libraries, it provides both CLI and web server capabilities for seamless integration into any workflow.
 
-
-
-https://github.com/user-attachments/assets/1bd7cc50-9eac-4402-80bd-42933ac35ca3
-
-
+<https://github.com/user-attachments/assets/1bd7cc50-9eac-4402-80bd-42933ac35ca3>
 
 ## 🎯 Mission
 
 RocketRAG aims to be the **fastest and most efficient RAG library** while maintaining:
+
 - **Minimal footprint** - Clean, lightweight codebase
 - **Maximum extensibility** - Pluggable architecture for all components
 - **Peak performance** - Leveraging the best-in-class libraries
@@ -33,11 +30,13 @@ RocketRAG is built on top of cutting-edge, performance-optimized libraries:
 ### Installation
 
 #### Using pip
+
 ```bash
 pip install rocketrag
 ```
 
 #### Using uvx (recommended for CLI usage)
+
 ```bash
 # Run directly without installation
 uvx rocketrag --help
@@ -76,6 +75,7 @@ rocketrag mcp-server
 ```
 
 #### Using uvx (no installation required)
+
 ```bash
 # Same commands work with uvx
 uvx rocketrag prepare --data-dir ./documents
@@ -201,6 +201,7 @@ print(result["sources"])
 ## 🎨 Features
 
 ### Core Features
+
 - ⚡ **Ultra-fast document processing** with Kreuzberg
 - 🧠 **Semantic chunking** with Chonkie and model2vec
 - 🔍 **High-performance vector search** with Milvus Lite
@@ -210,6 +211,7 @@ print(result["sources"])
 - 🔌 **Pluggable architecture** for easy customization
 
 ### Advanced Features
+
 - 📈 **Vector visualization** for debugging and analysis
 - 📚 **Document browsing** interface
 - 💬 **Streaming responses** for real-time interaction
@@ -220,14 +222,23 @@ print(result["sources"])
 
 ## 🤖 MCP Server
 
-RocketRAG includes an MCP (Model Context Protocol) server for integration with AI agents like Claude Desktop:
+RocketRAG includes an MCP (Model Context Protocol) server for integration with AI agents. Supports both **stdio** (local) and **HTTP** (remote) transports.
+
+### Stdio Transport (Local)
 
 ```bash
-# Start MCP server (stdio transport)
+# Start MCP server with stdio transport
 rocketrag mcp-server
 
 # Or with custom settings
 rocketrag mcp-server --db-path ./rag.db --collection-name docs
+```
+
+### HTTP Transport (Remote)
+
+```bash
+# Start MCP server with HTTP transport on custom port
+rocketrag mcp-server --transport http --host 0.0.0.0 --port 8000 --db-path ./rag.db --collection-name docs
 ```
 
 ### MCP Tools
@@ -240,9 +251,18 @@ rocketrag mcp-server --db-path ./rag.db --collection-name docs
 | `get_stats()` | Get database statistics |
 | `get_all_chunks(limit, offset)` | Paginated chunk retrieval |
 
+### HTTP Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /` | Service info and available tools |
+| `GET /health` | Health check |
+| `/mcp/sse` | MCP SSE endpoint for tool calls |
+| `/mcp/messages` | MCP messages endpoint |
+
 ### MCP Client Configuration
 
-Add to your MCP client config (e.g., Claude Desktop):
+**Claude Desktop (Stdio):**
 
 ```json
 {
@@ -253,6 +273,81 @@ Add to your MCP client config (e.g., Claude Desktop):
     }
   }
 }
+```
+
+**Claude Desktop (HTTP Remote):**
+
+```json
+{
+  "mcpServers": {
+    "rocketrag": {
+      "type": "http",
+      "url": "http://localhost:8000/mcp/sse"
+    }
+  }
+}
+```
+
+**OpenCode:**
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "rocketrag-stdio": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["rocketrag", "mcp-server"]
+    },
+    "rocketrag-http": {
+      "type": "remote",
+      "url": "http://localhost:8000/mcp/sse",
+      "enabled": false
+    }
+  }
+}
+```
+
+**OpenCode MCP Tools:**
+
+```yaml
+# .opencode/agents/default/tools.yaml
+tools:
+  - name: rocketrag-search
+    description: Search the RocketRAG vector database for relevant chunks
+    arguments:
+      - name: query
+        type: string
+        required: true
+      - name: top_k
+        type: integer
+        required: false
+        default: 5
+
+  - name: rocketrag-list-files
+    description: List all indexed filenames in the database
+
+  - name: rocketrag-get-file-chunks
+    description: Get all chunks from a specific file
+    arguments:
+      - name: filename
+        type: string
+        required: true
+
+  - name: rocketrag-stats
+    description: Get database statistics (chunks, files, dimension)
+
+  - name: rocketrag-get-all-chunks
+    description: Get all chunks with pagination
+    arguments:
+      - name: limit
+        type: integer
+        required: false
+        default: 100
+      - name: offset
+        type: integer
+        required: false
+        default: 0
 ```
 
 ## 🛠️ Development
@@ -301,9 +396,9 @@ We welcome contributions! RocketRAG's modular architecture makes it easy to:
 ## 🙏 Acknowledgments
 
 RocketRAG builds upon the excellent work of:
+
 - [Chonkie](https://github.com/bhavnicksm/chonkie) for semantic chunking
 - [Kreuzberg](https://github.com/mixedbread-ai/kreuzberg) for document processing
 - [llama-cpp-python](https://github.com/abetlen/llama-cpp-python) for LLM inference
 - [Milvus](https://github.com/milvus-io/milvus-lite) for vector storage
 - [Sentence Transformers](https://github.com/UKPLab/sentence-transformers) for embeddings
-
