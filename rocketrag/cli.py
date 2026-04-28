@@ -378,6 +378,23 @@ def visualize(
         )
 
 
+@app.command()
+def mcp_server(
+    db_path: str = typer.Option("rag.db", help="Path to the database file"),
+    collection_name: str = typer.Option("rag", help="Name of the collection"),
+    vectorizer_args: str = typer.Option(
+        '{"model_name": "minishlab/potion-multilingual-128M"}',
+        help="JSON string with vectorizer configuration",
+    ),
+):
+    """Start the RocketRAG MCP server for database querying."""
+    from .mcp_server import create_mcp_server
+
+    vectorizer_args_dict = json.loads(vectorizer_args)
+    mcp = create_mcp_server(db_path, collection_name, vectorizer_args_dict)
+    mcp.run(transport="stdio")
+
+
 def main():
     app()
 
