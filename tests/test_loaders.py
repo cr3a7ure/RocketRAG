@@ -115,7 +115,7 @@ class TestKreuzbergLoader:
         assert len(loader.supported_formats) > 0
         
         # Check some expected formats
-        expected_formats = {"pdf", "docx", "txt", "jpg", "png", "xlsx", "pptx", "html"}
+        expected_formats = {"pdf", "docx", "txt", "md", "markdown", "jpg", "png", "xlsx", "pptx", "html"}
         assert expected_formats.issubset(loader.supported_formats)
 
     def test_validate_supported_file_formats(self):
@@ -126,6 +126,8 @@ class TestKreuzbergLoader:
         assert loader._validate_file_format(Path("test.pdf")) is True
         assert loader._validate_file_format(Path("test.docx")) is True
         assert loader._validate_file_format(Path("test.txt")) is True
+        assert loader._validate_file_format(Path("test.md")) is True
+        assert loader._validate_file_format(Path("test.markdown")) is True
         
         # Test image formats
         assert loader._validate_file_format(Path("test.jpg")) is True
@@ -178,6 +180,29 @@ class TestKreuzbergLoader:
             
             # Verify extract_file_sync was called for each file
             assert mock_extract.call_count == 3
+
+    @patch('rocketrag.loaders.extract_file_sync')
+    def test_load_markdown_files(self, mock_extract):
+        """Test that markdown files are loaded successfully."""
+        mock_result = MagicMock()
+        mock_result.content = "# Test Markdown\n\nThis is content."
+        mock_extract.return_value = mock_result
+        
+        loader = KreuzbergLoader()
+        
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Create markdown test files
+            test_files = ["readme.md", "notes.markdown", "doc.MD", "doc.Markdown"]
+            for filename in test_files:
+                Path(temp_dir, filename).touch()
+            
+            documents = loader.load_files_from_dir(temp_dir)
+            
+            # Verify results
+            assert len(documents) == 4
+            assert all(isinstance(doc, Document) for doc in documents)
+            assert {doc.filename for doc in documents} == set(test_files)
+            assert mock_extract.call_count == 4
 
     def test_load_files_from_dir_unsupported_format(self):
         """Test error handling for unsupported file formats."""
