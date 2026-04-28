@@ -12,7 +12,7 @@ class KreuzbergLoader(BaseLoader):
         # Images
         "jpg", "jpeg", "png", "tiff", "bmp", "gif", "webp",
         # Spreadsheets
-        "xlsx", "xls", "csv", "ods",
+        "xlsx", "xls", "csv", "yaml", "yml", "ods",
         # Presentations
         "pptx", "ppt", "odp",
         # Web

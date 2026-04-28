@@ -115,7 +115,7 @@ class TestKreuzbergLoader:
         assert len(loader.supported_formats) > 0
         
         # Check some expected formats
-        expected_formats = {"pdf", "docx", "txt", "md", "markdown", "jpg", "png", "xlsx", "pptx", "html"}
+        expected_formats = {"pdf", "docx", "txt", "md", "markdown", "yaml", "yml", "jpg", "png", "xlsx", "pptx", "html"}
         assert expected_formats.issubset(loader.supported_formats)
 
     def test_validate_supported_file_formats(self):
@@ -136,6 +136,8 @@ class TestKreuzbergLoader:
         # Test spreadsheet formats
         assert loader._validate_file_format(Path("test.xlsx")) is True
         assert loader._validate_file_format(Path("test.csv")) is True
+        assert loader._validate_file_format(Path("test.yaml")) is True
+        assert loader._validate_file_format(Path("test.yml")) is True
         
         # Test presentation formats
         assert loader._validate_file_format(Path("test.pptx")) is True
