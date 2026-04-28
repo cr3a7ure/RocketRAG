@@ -16,7 +16,9 @@ class KreuzbergLoader(BaseLoader):
         # Presentations
         "pptx", "ppt", "odp",
         # Web
-        "html", "xml", "mhtml"
+        "html", "xml", "mhtml",
+        # Code
+        "py", "js", "jsx", "ts", "tsx", "css",
     }
 
     def __init__(self, **kwargs: dict):

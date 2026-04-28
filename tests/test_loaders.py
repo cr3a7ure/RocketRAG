@@ -115,7 +115,7 @@ class TestKreuzbergLoader:
         assert len(loader.supported_formats) > 0
         
         # Check some expected formats
-        expected_formats = {"pdf", "docx", "txt", "md", "markdown", "yaml", "yml", "jpg", "png", "xlsx", "pptx", "html"}
+        expected_formats = {"pdf", "docx", "txt", "md", "markdown", "yaml", "yml", "py", "ts", "tsx", "css", "html", "jpg", "png", "xlsx", "pptx", "html"}
         assert expected_formats.issubset(loader.supported_formats)
 
     def test_validate_supported_file_formats(self):
@@ -144,6 +144,13 @@ class TestKreuzbergLoader:
         
         # Test web formats
         assert loader._validate_file_format(Path("test.html")) is True
+        
+        # Test code formats
+        assert loader._validate_file_format(Path("test.py")) is True
+        assert loader._validate_file_format(Path("test.js")) is True
+        assert loader._validate_file_format(Path("test.ts")) is True
+        assert loader._validate_file_format(Path("test.tsx")) is True
+        assert loader._validate_file_format(Path("test.css")) is True
 
     def test_validate_unsupported_file_formats(self):
         """Test validation of unsupported file formats."""
@@ -225,7 +232,7 @@ class TestKreuzbergLoader:
         loader = KreuzbergLoader()
         
         with tempfile.TemporaryDirectory() as temp_dir:
-            unsupported_files = ["video.mp4", "audio.mp3", "script.py", "archive.zip"]
+            unsupported_files = ["video.mp4", "audio.mp3", "binary.bin", "archive.zip"]
             for filename in unsupported_files:
                 Path(temp_dir, filename).touch()
             
@@ -245,7 +252,7 @@ class TestKreuzbergLoader:
             assert "Skipped 4 unsupported file(s)" in captured.out
             assert "mp3" in captured.out
             assert "mp4" in captured.out
-            assert "py" in captured.out
+            assert "bin" in captured.out
             assert "zip" in captured.out
 
     def test_load_files_from_dir_skips_directories(self):
