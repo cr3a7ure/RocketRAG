@@ -24,20 +24,24 @@ class KreuzbergLoader(BaseLoader):
 
     def load_files_from_dir(self, path: str):
         documents: list[Document] = []
+        skipped_files: list[tuple[str, str]] = []
         for file in Path(path).iterdir():
             if file.is_file(): 
                 if not self._validate_file_format(file):
-                    self._raise_unsupported_format_error(file)
+                    skipped_files.append((file.name, file.suffix.lstrip(".")))
+                    continue
                 
                 try:
                     content = extract_file_sync(file).content
                     documents.append(Document(content, file.name))
-                except Exception as e:
-                    # Re-raise with more context about the file
-                    raise ValueError(
-                        f"Failed to process file '{file.name}': {str(e)}. "
-                        f"This may be due to an unsupported file format or corrupted file."
-                    ) from e
+                except Exception:
+                    skipped_files.append((file.name, file.suffix.lstrip(".") or "no extension"))
+                    continue
+        
+        if skipped_files:
+            extensions = set(ext for _, ext in skipped_files)
+            print(f"Skipped {len(skipped_files)} unsupported file(s): {', '.join(sorted(extensions))}")
+        
         return documents
 
 
