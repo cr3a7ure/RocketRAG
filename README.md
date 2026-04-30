@@ -164,6 +164,50 @@ rocketrag ask "Your question" \
   --filename "*.gguf"
 ```
 
+### E5 Embedding Model
+
+The [intfloat/e5](https://huggingface.co/intfloat/e5-base-v2) models provide high-quality embeddings for technical content. RocketRAG automatically handles the required `"query: "` and `"passage: "` prefixes:
+
+```python
+from rocketrag import RocketRAG
+from rocketrag.vectors import SentenceTransformersVectorizer
+from rocketrag.chonk import ChonkieChunker
+from rocketrag.loaders import KreuzbergLoader
+
+vectorizer = SentenceTransformersVectorizer(
+    model_name="intfloat/e5-base-v2"  # 768 dimensions, strong on technical content
+)
+
+chunker = ChonkieChunker(
+    method="semantic",
+    embedding_model="intfloat/e5-base-v2",
+    chunk_size=512,
+    threshold=0.3
+)
+
+loader = KreuzbergLoader()
+
+rag = RocketRAG(
+    data_dir="./data",
+    db_path="e5_rag.db",
+    collection_name="e5_docs",
+    vectorizer=vectorizer,
+    chunker=chunker,
+    loader=loader,
+)
+
+rag.prepare()
+answer, sources = rag.ask("What is the main topic?")
+```
+
+```bash
+# Or via CLI with e5-base-v2
+rocketrag prepare \
+  --data-dir ./documents \
+  --vectorizer-args '{"model_name": "intfloat/e5-base-v2"}' \
+  --chonker-args '{"method": "semantic", "chunk_size": 512}'
+```
+
 ## 🌐 Web Server
 
 RocketRAG includes a FastAPI-based web server with OpenAI-compatible endpoints:
