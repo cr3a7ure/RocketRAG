@@ -283,6 +283,12 @@ rocketrag mcp-server --db-path ./rag.db --collection-name docs
 ```bash
 # Start MCP server with HTTP transport on custom port
 rocketrag mcp-server --transport http --host 0.0.0.0 --port 8000 --db-path ./rag.db --collection-name docs
+
+# With e5-base-v2 embeddings
+rocketrag mcp-server --transport http --host 0.0.0.0 --port 8000 \
+  --db-path ./rag.db \
+  --collection-name docs \
+  --vectorizer-args '{"model_name": "intfloat/e5-base-v2"}'
 ```
 
 ### MCP Tools
