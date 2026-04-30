@@ -108,15 +108,21 @@ class TestKreuzbergLoader:
     def test_supported_formats_defined(self):
         """Test that KreuzbergLoader has supported formats defined."""
         loader = KreuzbergLoader()
-        
-        # Check that supported formats are defined
+
         assert hasattr(loader, 'supported_formats')
         assert isinstance(loader.supported_formats, set)
         assert len(loader.supported_formats) > 0
-        
-        # Check some expected formats
+
         expected_formats = {"pdf", "docx", "txt", "md", "markdown", "yaml", "yml", "py", "ts", "tsx", "css", "html", "jpg", "png", "xlsx", "pptx", "html"}
         assert expected_formats.issubset(loader.supported_formats)
+
+    def test_supported_formats_extended_code(self):
+        """Test that extended code formats are supported."""
+        loader = KreuzbergLoader()
+
+        code_formats = {"py", "js", "jsx", "ts", "tsx", "css", "java", "go", "rs", "c", "cpp", "h", "hpp", "cs", "rb", "swift", "kt", "scala", "php", "lua", "r", "sql", "sh", "bash"}
+        for fmt in code_formats:
+            assert loader._validate_file_format(Path(f"test.{fmt}")) is True, f"Format {fmt} should be supported"
 
     def test_validate_supported_file_formats(self):
         """Test validation of supported file formats."""
@@ -165,29 +171,25 @@ class TestKreuzbergLoader:
     @patch('rocketrag.loaders.extract_file_sync')
     def test_load_files_from_dir_success(self, mock_extract):
         """Test successful file loading from directory."""
-        # Mock extract_file_sync to return content
         mock_result = MagicMock()
         mock_result.content = "Test content"
+        mock_result.get_detected_language.return_value = "python"
         mock_extract.return_value = mock_result
-        
+
         loader = KreuzbergLoader()
-        
-        # Create temporary directory with test files
+
         with tempfile.TemporaryDirectory() as temp_dir:
-            # Create test files with supported formats
             test_files = ["test1.pdf", "test2.txt", "test3.docx"]
             for filename in test_files:
                 Path(temp_dir, filename).touch()
-            
+
             documents = loader.load_files_from_dir(temp_dir)
-            
-            # Verify results
+
             assert len(documents) == 3
             assert all(isinstance(doc, Document) for doc in documents)
             assert all(doc.content == "Test content" for doc in documents)
             assert {doc.filename for doc in documents} == set(test_files)
-            
-            # Verify extract_file_sync was called for each file
+            assert all(doc.language == "python" for doc in documents)
             assert mock_extract.call_count == 3
 
     @patch('rocketrag.loaders.extract_file_sync')

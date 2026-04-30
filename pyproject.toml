@@ -18,10 +18,10 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    "chonkie[model2vec]>=1.1.2",
+    "chonkie[code,model2vec]>=1.6.3",
     "fastapi>=0.116.1",
     "jinja2>=3.1.0",
-    "kreuzberg>=3.11.2",
+    "kreuzberg>=4.8.5",
     "llama-cpp-python>=0.3.16",
     "mcp>=1.0.0",
     "numpy>=1.24.0",
