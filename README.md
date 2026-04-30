@@ -208,6 +208,54 @@ rocketrag prepare \
   --chonker-args '{"method": "semantic", "chunk_size": 512}'
 ```
 
+### Qwen Embedding Model
+
+The [Qwen text-embedding-v4](https://help.aliyun.com/document_detail/2712512.html) model from Alibaba Cloud provides high-quality 1024-dimensional embeddings via the DashScope API:
+
+```python
+import os
+from rocketrag import RocketRAG
+from rocketrag.vectors import QwenEmbeddingVectorizer
+from rocketrag.chonk import ChonkieChunker
+from rocketrag.loaders import KreuzbergLoader
+
+os.environ["DASHSCOPE_API_KEY"] = "your-api-key"
+
+vectorizer = QwenEmbeddingVectorizer(
+    model_name="text-embedding-v4",  # 1024 dimensions
+)
+
+chunker = ChonkieChunker(
+    method="semantic",
+    embedding_model="minishlab/potion-multilingual-128M",
+    chunk_size=512,
+    threshold=0.3
+)
+
+loader = KreuzbergLoader()
+
+rag = RocketRAG(
+    data_dir="./data",
+    db_path="qwen_rag.db",
+    collection_name="qwen_docs",
+    vectorizer=vectorizer,
+    chunker=chunker,
+    loader=loader,
+)
+
+rag.prepare()
+answer, sources = rag.ask("What is the main topic?")
+```
+
+```bash
+# Or via CLI with Qwen embeddings
+export DASHSCOPE_API_KEY="your-api-key"
+rocketrag prepare \
+  --data-dir ./documents \
+  --vectorizer-args '{"model_name": "text-embedding-v4"}' \
+  --chonker-args '{"method": "semantic", "chunk_size": 512}'
+```
+
 ## 🌐 Web Server
 
 RocketRAG includes a FastAPI-based web server with OpenAI-compatible endpoints:
@@ -289,6 +337,13 @@ rocketrag mcp-server --transport http --host 0.0.0.0 --port 8000 \
   --db-path ./rag.db \
   --collection-name docs \
   --vectorizer-args '{"model_name": "intfloat/e5-base-v2"}'
+
+# With Qwen text-embedding-v4 (1024 dimensions)
+export DASHSCOPE_API_KEY="your-api-key"
+rocketrag mcp-server --transport http --host 0.0.0.0 --port 8000 \
+  --db-path ./rag.db \
+  --collection-name docs \
+  --vectorizer-args '{"model_name": "text-embedding-v4"}'
 ```
 
 ### MCP Tools
