@@ -75,7 +75,7 @@ class ChonkieChunker(BaseChunker):
         - min_characters_per_chunk: Minimum characters per chunk (default: 24)
 
     CodeChunker:
-        - language: Programming language (required)
+        - language: Programming language (default: "auto" - auto-detect via Magika)
         - tokenizer_or_token_counter: Tokenizer to use (default: "character")
         - chunk_size: Maximum tokens per chunk (default: 2048)
         - include_nodes: Include AST nodes in output (default: False)
@@ -98,6 +98,9 @@ class ChonkieChunker(BaseChunker):
 
         >>> # Code chunking for Python files
         >>> chunker = ChonkieChunker(method="code", language="python", chunk_size=1024)
+
+        >>> # Code chunking with auto language detection
+        >>> chunker = ChonkieChunker(method="code", language="auto", chunk_size=1024)
     """
 
     name = "chonkie"
@@ -106,8 +109,11 @@ class ChonkieChunker(BaseChunker):
         method = kwargs.get("method", "recursive")
         kwargs.pop("method", None)
 
-        # Initialize the appropriate chunker based on method
-        if method == "token":
+        if method == "code":
+            language = kwargs.get("language", "auto")
+            kwargs["language"] = language
+            self.chunker = CodeChunker(**kwargs)
+        elif method == "token":
             self.chunker = TokenChunker(**kwargs)
         elif method == "sentence":
             self.chunker = SentenceChunker(**kwargs)
@@ -119,8 +125,6 @@ class ChonkieChunker(BaseChunker):
             self.chunker = SlumberChunker(**kwargs)
         elif method == "late":
             self.chunker = LateChunker(**kwargs)
-        elif method == "code":
-            self.chunker = CodeChunker(**kwargs)
         elif method == "neural":
             self.chunker = NeuralChunker(**kwargs)
         else:
@@ -128,15 +132,31 @@ class ChonkieChunker(BaseChunker):
                 f"Unknown chonker method: {method}. "
                 f"Available methods: token, sentence, recursive, semantic, sdpm, late, code, neural"
             )
+        self.method = method
         super().__init__(**kwargs)
 
     def chunk(self, document: Document) -> Document:
+        if self.method == "code":
+            lang = document.language if document.language else "auto"
+            if lang != "auto":
+                try:
+                    from chonkie import CodeChunker as CC
+                    code_chunker = CC(
+                        tokenizer=self.chunker.tokenizer if hasattr(self.chunker, 'tokenizer') else "character",
+                        chunk_size=self.chunker.chunk_size if hasattr(self.chunker, 'chunk_size') else 2048,
+                        language=lang,
+                        include_nodes=self.chunker.include_nodes if hasattr(self.chunker, 'include_nodes') else False,
+                    )
+                    document.chunks = [chunk.text for chunk in code_chunker.chunk(document.content)]
+                    return document
+                except Exception:
+                    pass
         document.chunks = [chunk.text for chunk in self.chunker.chunk(document.content)]
         return document
 
     def chunk_batch(self, documents: list[Document]) -> list[Document]:
         for doc in documents:
-            doc.chunks = [chunk.text for chunk in self.chunker.chunk(doc.content)]
+            doc = self.chunk(doc)
         return documents
 
 

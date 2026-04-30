@@ -146,6 +146,7 @@ class MilvusLiteDB:
                     "vector": vectors[i],
                     "text": new_chunks[i],
                     "filename": doc.filename,
+                    "language": doc.language if hasattr(doc, 'language') and doc.language else "",
                 }
                 for i in range(len(new_chunks))
             ]
@@ -159,14 +160,15 @@ class MilvusLiteDB:
             collection_name=self.collection_name,
             data=[query_vector],
             limit=top_k,
-            output_fields=["text", "filename"],
-            anns_field="vector",  # Explicitly specify the vector field
+            output_fields=["text", "filename", "language"],
+            anns_field="vector",
         )
         results = [
             SearchResult(
                 chunk=result["entity"]["text"],
                 filename=result["entity"]["filename"],
                 score=result["distance"],
+                language=result["entity"].get("language", ""),
             )
             for result in results[0]
         ]
