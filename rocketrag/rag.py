@@ -60,9 +60,9 @@ class RAG:
 
         return final_message
 
-    def run(self, question: str) -> tuple[str, list[SearchResult]]:
-        """Run RAG system and return complete answer."""
-        search_results = self.db.search(question, top_k=5)
+    def run(self, question: str, search_results: list[SearchResult] | None = None) -> tuple[str, list[SearchResult]]:
+        if search_results is None:
+            search_results = self.db.search(question, top_k=5)
         docs = [doc.chunk for doc in search_results]
         context_message = self.construct_context_message(question, docs)
         messages = [
@@ -71,9 +71,9 @@ class RAG:
         ]
         return self.llm.run(messages), search_results
 
-    def stream(self, question: str) -> tuple[str, list[SearchResult]]:
-        """Stream RAG system response. Returns a generator of response chunks."""
-        search_results = self.db.search(question, top_k=5)
+    def stream(self, question: str, search_results: list[SearchResult] | None = None) -> tuple[str, list[SearchResult]]:
+        if search_results is None:
+            search_results = self.db.search(question, top_k=5)
         docs = [doc.chunk for doc in search_results]
         context_message = self.construct_context_message(question, docs)
         messages = [

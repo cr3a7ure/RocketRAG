@@ -29,8 +29,12 @@ def setup_routes(app, rocket_rag):
     @app.post("/ask", response_model=QuestionResponse)
     async def ask_question(request: QuestionRequest):
         try:
-            answer, sources = rocket_rag.ask(request.question)
-            # Convert SearchResult objects to SourceInfo format
+            collections = None
+            if request.all_collections:
+                collections = ["__all__"]
+            elif request.collection_names:
+                collections = request.collection_names
+            answer, sources = rocket_rag.ask(request.question, collection_names=collections)
             serializable_sources = [
                 {
                     "text": source.chunk,
@@ -46,10 +50,14 @@ def setup_routes(app, rocket_rag):
     @app.post("/ask/stream")
     async def ask_question_stream(request: QuestionRequest):
         try:
+            collections = None
+            if request.all_collections:
+                collections = ["__all__"]
+            elif request.collection_names:
+                collections = request.collection_names
 
             def generate_stream():
-                stream, sources = rocket_rag.stream_ask(request.question)
-                # Convert SearchResult objects to dictionaries for JSON serialization
+                stream, sources = rocket_rag.stream_ask(request.question, collection_names=collections)
                 serializable_sources = [
                     {
                         "text": source.chunk,
