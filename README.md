@@ -64,6 +64,9 @@ print(answer)
 # Prepare documents from a directory
 rocketrag prepare --data-dir ./documents
 
+# Check files without indexing (dry-run)
+rocketrag prepare --data-dir ./documents --dry-run
+
 # Ask questions via CLI
 rocketrag ask "What are the key findings?"
 
@@ -482,11 +485,12 @@ ruff format .
 
 RocketRAG is designed for speed:
 
-- **Document Loading**: 10x faster with Kreuzberg's optimized parsers
+- **Document Loading**: 10x faster with Kreuzberg's optimized parsers, parallel extraction with configurable workers
 - **Chunking**: Semantic chunking with model2vec for superior context preservation
 - **Vectorization**: Optimized batch processing with sentence-transformers
 - **Retrieval**: Sub-millisecond vector search with Milvus Lite
 - **Generation**: GGUF quantization for 4x faster inference
+- **Dry-run**: Check files before indexing to catch problems early
 
 ## 🤝 Contributing
 
