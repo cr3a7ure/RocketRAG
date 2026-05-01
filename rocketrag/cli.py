@@ -92,6 +92,9 @@ def prepare(
     loader_args: str = typer.Option(
         "{}", help="JSON string with loader configuration arguments"
     ),
+    max_workers: int = typer.Option(
+        4, help="Number of parallel workers for file extraction"
+    ),
     db_path: str = typer.Option("rag.db", help="Path to the database file"),
     collection_name: str = typer.Option(
         "rag", help="Name of the collection in the database"
@@ -111,7 +114,7 @@ def prepare(
         "sentence_transformers", **vectorizer_args_dict
     )
     chunker = imports["init_chonker"](chonker, **chonker_args_dict)
-    loader = imports["init_loader"](loader, **loader_args_dict)
+    loader = imports["init_loader"](loader, max_workers=max_workers, **loader_args_dict)
 
     for directory in data_dir:
         if not os.path.isdir(directory):
