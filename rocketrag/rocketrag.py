@@ -8,7 +8,7 @@ from .vectors import SentenceTransformersVectorizer
 from .chonk import ChonkieChunker
 from .llm import LLamaLLM
 from .loaders import KreuzbergLoader
-from .data_models import SearchResult
+from .data_models import Document, SearchResult
 
 
 def ensure_llm_loaded(func):
@@ -80,15 +80,19 @@ class RocketRAG:
             self.metadata,
         )
 
-    def prepare(self, recreate: bool = False):
+    def prepare(self, recreate: bool = False, dry_run: bool = False) -> list[Document] | None:
         if self.loader is None:
             raise ValueError("Loader is not defined.")
         if self.data_dir is None:
             raise ValueError("Data directory is not defined.")
         documents = self.loader.load_files_from_dir(self.data_dir)
 
+        if dry_run:
+            return documents
+
         self.db.create_collection_if_not_exists(recreate)
         self.db.add_documents(documents)
+        return None
 
     @ensure_llm_loaded
     def run_llm(self, messages: list[dict]) -> str:
