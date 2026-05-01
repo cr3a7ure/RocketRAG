@@ -100,6 +100,7 @@ def prepare(
         "rag", help="Name of the collection in the database"
     ),
     recreate: bool = typer.Option(False, help="Recreate the collection if it exists"),
+    dry_run: bool = typer.Option(False, help="Check files without inserting to database"),
 ):
     """Prepare the RAG system by processing documents and creating embeddings."""
     imports = _lazy_imports()
@@ -137,6 +138,13 @@ def prepare(
             chunker,
             loader,
         )
+        if dry_run:
+            docs = rag.prepare(recreate, dry_run=True)
+            if docs:
+                print(f"[bold green]Dry-run: Would process {len(docs)} file(s)[/bold green]")
+                for doc in docs:
+                    print(f"  - {doc.filename} ({len(doc.chunks)} chunks)")
+            continue
         rag.prepare(recreate)
 
 
