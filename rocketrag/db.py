@@ -102,30 +102,33 @@ class MilvusLiteDB:
         """Generate SHA-256 hash of the text content."""
         return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
-    def _document_exists(self, text_hash: str) -> bool:
-        """Check if a document with the given hash already exists."""
+    def _get_all_existing_ids(self) -> set[str]:
         try:
             results = self.client.query(
                 collection_name=self.collection_name,
-                filter=f'id == "{text_hash}"',
+                filter="",
                 output_fields=["id"],
-                limit=1,
+                limit=16384,
             )
-            return len(results) > 0
+            return {r["id"] for r in results}
         except Exception:
-            # If query fails (e.g., collection doesn't exist), assume document doesn't exist
-            return False
+            return set()
 
     def add_documents(self, documents: list[Document]):
         if self.chunker:
             documents = self.chunker.chunk_batch(documents)
 
+        existing_ids = self._get_all_existing_ids()
+
         for doc in track(documents, description="Processing documents"):
             new_chunks = []
+            new_ids = []
             for chunk in doc.chunks:
-                text_hash = self._get_text_hash(chunk)
-                if not self._document_exists(text_hash):
+                chunk_id = self._get_text_hash(chunk)
+                if chunk_id not in existing_ids:
                     new_chunks.append(chunk)
+                    new_ids.append(chunk_id)
+                    existing_ids.add(chunk_id)
 
             if not new_chunks:
                 print(
@@ -142,7 +145,7 @@ class MilvusLiteDB:
 
             data = [
                 {
-                    "id": self._get_text_hash(new_chunks[i]),
+                    "id": new_ids[i],
                     "vector": vectors[i],
                     "text": new_chunks[i],
                     "filename": doc.filename,
