@@ -72,8 +72,8 @@ app = typer.Typer()
 
 @app.command()
 def prepare(
-    data_dir: str = typer.Option(
-        "pdf", help="Directory containing documents to process"
+    data_dir: list[str] = typer.Argument(
+        ..., help="Directory(s) containing documents to process"
     ),
     chonker: str = typer.Option(
         "chonkie", help="Chunking strategy to use (e.g., 'chonkie')"
@@ -99,33 +99,42 @@ def prepare(
     recreate: bool = typer.Option(False, help="Recreate the collection if it exists"),
 ):
     """Prepare the RAG system by processing documents and creating embeddings."""
-    # Import heavy dependencies only when needed
     imports = _lazy_imports()
 
     print(Panel("[bold blue]Preparing RAG system...[/bold blue]"))
 
-    # Parse JSON arguments
     chonker_args_dict = json.loads(chonker_args)
     vectorizer_args_dict = json.loads(vectorizer_args)
     loader_args_dict = json.loads(loader_args)
 
-    # Initialize components
     vectorizer = imports["init_vectorizer"](
         "sentence_transformers", **vectorizer_args_dict
     )
     chunker = imports["init_chonker"](chonker, **chonker_args_dict)
     loader = imports["init_loader"](loader, **loader_args_dict)
 
-    # Create RAG system
-    rag = imports["RocketRAG"](
-        data_dir,
-        db_path,
-        collection_name,
-        vectorizer,
-        chunker,
-        loader,
-    )
-    rag.prepare(recreate)
+    for directory in data_dir:
+        if not os.path.isdir(directory):
+            console = Console()
+            console.print(
+                Panel(
+                    f"Directory not found: {directory}",
+                    title="Error",
+                    border_style="red",
+                )
+            )
+            continue
+
+        print(f"\n[bold cyan]Processing directory: {directory}[/bold cyan]")
+        rag = imports["RocketRAG"](
+            directory,
+            db_path,
+            collection_name,
+            vectorizer,
+            chunker,
+            loader,
+        )
+        rag.prepare(recreate)
 
 
 @app.command()
