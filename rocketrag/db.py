@@ -157,10 +157,11 @@ class MilvusLiteDB:
             self.client.insert(collection_name=self.collection_name, data=data)
             print(f"Successfully added {len(new_chunks)} chunks to the collection.")
 
-    def search(self, query: str, top_k: int = 5) -> list[SearchResult]:
+    def search(self, query: str, top_k: int = 5, collection_name: str | None = None) -> list[SearchResult]:
         query_vector = self.vectorizer.vectorize(query)
+        target_collection = collection_name if collection_name else self.collection_name
         results = self.client.search(
-            collection_name=self.collection_name,
+            collection_name=target_collection,
             data=[query_vector],
             limit=top_k,
             output_fields=["text", "filename", "language"],
@@ -176,6 +177,33 @@ class MilvusLiteDB:
             for result in results[0]
         ]
         return results
+
+    def search_collections(self, query: str, collection_names: list[str], top_k: int = 5) -> list[SearchResult]:
+        all_results = []
+        for col in collection_names:
+            try:
+                results = self.client.search(
+                    collection_name=col,
+                    data=[self.vectorizer.vectorize(query)],
+                    limit=top_k,
+                    output_fields=["text", "filename", "language"],
+                    anns_field="vector",
+                )
+                for result in results[0]:
+                    all_results.append(SearchResult(
+                        chunk=result["entity"]["text"],
+                        filename=result["entity"]["filename"],
+                        score=result["distance"],
+                        language=result["entity"].get("language", ""),
+                    ))
+            except Exception:
+                continue
+        all_results.sort(key=lambda x: x.score, reverse=True)
+        return all_results[:top_k]
+
+    def search_all(self, query: str, top_k: int = 5) -> list[SearchResult]:
+        collections = self.client.list_collections()
+        return self.search_collections(query, collections, top_k)
 
     def show_stats(self):
         """Display database statistics using rich formatting."""

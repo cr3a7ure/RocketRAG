@@ -170,11 +170,19 @@ def ask(
         help="JSON string with vectorizer configuration arguments",
     ),
     db_path: str = typer.Option("rag.db", help="Path to the database file"),
-    collection_name: str = typer.Option(
-        "rag", help="Name of the collection in the database"
+    collection_name: list[str] = typer.Option(
+        None, help="Collection name(s) to search (can specify multiple)"
+    ),
+    all_collections: bool = typer.Option(
+        False, "--all", help="Search all collections"
     ),
 ):
-    """Ask a question to the RAG system"""
+    collections = None
+    if all_collections:
+        collections = ["__all__"]
+    elif collection_name:
+        collections = collection_name
+
     imports = _lazy_imports()
 
     vectorizer_config = json.loads(vectorizer_args)
@@ -186,11 +194,11 @@ def ask(
 
     rag = imports["RocketRAG"](
         db_path=db_path,
-        collection_name=collection_name,
+        collection_name="rag",
         vectorizer=vectorizer,
         llm=llm,
     )
-    stream, sources = rag.stream_ask(question)
+    stream, sources = rag.stream_ask(question, collection_names=collections)
     imports["display_streaming_answer"](question, stream, sources)
 
 

@@ -4,6 +4,8 @@ from typing import List, Optional, Dict, Any
 
 class QuestionRequest(BaseModel):
     question: str
+    collection_names: Optional[List[str]] = None
+    all_collections: bool = False
 
 
 class SourceInfo(BaseModel):

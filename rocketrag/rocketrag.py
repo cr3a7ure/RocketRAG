@@ -1,4 +1,5 @@
 from functools import wraps
+from typing import Optional
 from .base import BaseChunker, BaseLLM, BaseLoader, BaseVectorizer
 from .db import MilvusLiteDB
 from .rag import RAG
@@ -98,15 +99,25 @@ class RocketRAG:
         return self.llm.stream(messages)
 
     @ensure_llm_loaded
-    def ask(self, question: str) -> tuple[str, list[SearchResult]]:
-        # TODO: Should print the error on vectorizer mismach
+    def ask(self, question: str, collection_names: Optional[list[str]] = None) -> tuple[str, list[SearchResult]]:
+        if collection_names is None:
+            search_results = self.db.search(question)
+        elif collection_names == ["__all__"]:
+            search_results = self.db.search_all(question)
+        else:
+            search_results = self.db.search_collections(question, collection_names)
         rag = RAG(self.db, self.llm)
-        stream, sources = rag.run(question)
+        stream, sources = rag.run(question, search_results=search_results)
         return stream, sources
 
     @ensure_llm_loaded
-    def stream_ask(self, question: str) -> tuple[str, list[SearchResult]]:
-        # TODO: Should print the error on vectorizer mismach
+    def stream_ask(self, question: str, collection_names: Optional[list[str]] = None) -> tuple[str, list[SearchResult]]:
+        if collection_names is None:
+            search_results = self.db.search(question)
+        elif collection_names == ["__all__"]:
+            search_results = self.db.search_all(question)
+        else:
+            search_results = self.db.search_collections(question, collection_names)
         rag = RAG(self.db, self.llm)
-        stream, sources = rag.stream(question)
+        stream, sources = rag.stream(question, search_results=search_results)
         return stream, sources

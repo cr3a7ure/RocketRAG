@@ -27,8 +27,33 @@ def create_mcp_server(
     )
 
     @mcp.tool()
-    def search(query: str, top_k: int = 5) -> list[dict]:
+    def search(query: str, top_k: int = 5, collection_name: str = None) -> list[dict]:
         """Search the database for relevant chunks.
+
+        Args:
+            query: The search query text
+            top_k: Number of results to return (default: 5)
+            collection_name: Specific collection to search (default: search default)
+
+        Returns:
+            List of search results with chunk text, filename, and score
+        """
+        try:
+            results = db.search(query, top_k=top_k, collection_name=collection_name)
+            return [
+                {
+                    "chunk": r.chunk,
+                    "filename": r.filename,
+                    "score": r.score,
+                }
+                for r in results
+            ]
+        except Exception as e:
+            return [{"error": str(e), "results": []}]
+
+    @mcp.tool()
+    def search_all(query: str, top_k: int = 5) -> list[dict]:
+        """Search ALL collections in the database for relevant chunks.
 
         Args:
             query: The search query text
@@ -38,7 +63,7 @@ def create_mcp_server(
             List of search results with chunk text, filename, and score
         """
         try:
-            results = db.search(query, top_k=top_k)
+            results = db.search_all(query, top_k=top_k)
             return [
                 {
                     "chunk": r.chunk,
