@@ -1,7 +1,10 @@
 from pathlib import Path
-from kreuzberg import extract_file_sync
+from kreuzberg import extract_file_sync, ExtractionConfig
 from .data_models import Document
 from .base import BaseLoader
+
+
+IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "tiff", "bmp", "gif", "webp"}
 
 
 class KreuzbergLoader(BaseLoader):
@@ -35,9 +38,11 @@ class KreuzbergLoader(BaseLoader):
         "nginx", "apache", "haproxy", "traefik",
     }
 
-    def __init__(self, **kwargs: dict):
+    def __init__(self, disable_ocr: bool = False, **kwargs: dict):
         super().__init__(**kwargs)
         self._gitignore_patterns: set = set()
+        self._disable_ocr = disable_ocr
+        self._config = ExtractionConfig(disable_ocr=True) if disable_ocr else None
 
     def _merge_gitignore(self, parent_patterns: set, child_patterns: set) -> set:
         merged = parent_patterns.copy()
@@ -88,11 +93,14 @@ class KreuzbergLoader(BaseLoader):
         return False
 
     def _language_from_extension(self, ext: str) -> str:
-        from tree_sitter_language_pack import detect_language_from_extension
         ext_clean = ext.lower().lstrip(".")
-        detected = detect_language_from_extension(ext_clean)
-        if detected:
-            return detected
+        try:
+            from tree_sitter_language_pack import detect_language_from_extension
+            detected = detect_language_from_extension(ext_clean)
+            if detected:
+                return detected
+        except Exception:
+            pass
         fallback_map = {
             "py": "python",
             "js": "javascript",
@@ -204,7 +212,12 @@ class KreuzbergLoader(BaseLoader):
                     skipped_files.append((entry.name, entry.suffix.lstrip(".")))
                     continue
                 try:
-                    result = extract_file_sync(entry)
+                    config = self._config
+                    if config is None:
+                        ext = entry.suffix.lstrip(".").lower()
+                        if ext in IMAGE_EXTENSIONS:
+                            config = ExtractionConfig(disable_ocr=True)
+                    result = extract_file_sync(entry, config=config)
                     detected_lang = result.get_detected_language()
                     if not detected_lang:
                         detected_lang = self._language_from_extension(entry.suffix)
