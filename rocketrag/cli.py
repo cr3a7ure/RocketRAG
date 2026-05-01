@@ -418,6 +418,80 @@ def mcp_server(
         run_stdio(db_path, collection_name, vectorizer_args_dict)
 
 
+@app.command()
+def check(
+    data_dir: str = typer.Argument(".", help="Directory to scan"),
+    disable_ocr: bool = typer.Option(False, help="Disable OCR when scanning"),
+):
+    """Diagnose and find problematic files in a directory."""
+    from pathlib import Path
+    from kreuzberg import extract_file_sync, ExtractionConfig
+    from rich.console import Console
+    from rich.table import Table
+
+    console = Console()
+    config = ExtractionConfig(disable_ocr=disable_ocr)
+
+    results = {"pdf": [], "images": [], "other": [], "errors": []}
+    image_exts = {"jpg", "jpeg", "png", "tiff", "bmp", "gif", "webp"}
+
+    console.print(f"[cyan]Scanning: {data_dir}[/cyan]")
+    console.print()
+
+    for root, dirs, files in os.walk(data_dir):
+        dirs[:] = [d for d in dirs if d != ".git"]
+
+        for filename in sorted(files):
+            filepath = os.path.join(root, filename)
+            ext = Path(filename).suffix.lower().lstrip(".")
+
+            if ext == "pdf":
+                try:
+                    extract_file_sync(filepath, config=config)
+                    results["pdf"].append((filename, filepath, "OK"))
+                except Exception as e:
+                    results["pdf"].append((filename, filepath, f"FAIL: {type(e).__name__}"))
+                    results["errors"].append(filepath)
+            elif ext in image_exts:
+                try:
+                    extract_file_sync(filepath, config=config)
+                    results["images"].append((filename, filepath, "OK"))
+                except Exception as e:
+                    results["images"].append((filename, filepath, f"FAIL: {type(e).__name__}"))
+                    results["errors"].append(filepath)
+
+    if results["pdf"]:
+        table = Table(title="PDF Files")
+        table.add_column("Status", style="green", width=8)
+        table.add_column("File", style="cyan")
+        for filename, filepath, status in results["pdf"]:
+            style = "green" if status == "OK" else "red"
+            table.add_row(status, filepath)
+
+        console.print(table)
+
+    if results["images"]:
+        table = Table(title="Image Files")
+        table.add_column("Status", style="green", width=8)
+        table.add_column("File", style="cyan")
+        for filename, filepath, status in results["images"]:
+            style = "green" if status == "OK" else "red"
+            table.add_row(status, filepath)
+
+        console.print(table)
+
+    if results["errors"]:
+        console.print()
+        console.print(f"[bold red]Found {len(results['errors'])} problematic files:[/bold red]")
+        for filepath in results["errors"]:
+            console.print(f"  [red]•[/red] {filepath}")
+    else:
+        console.print()
+        console.print("[bold green]No problems found![/bold green]")
+
+    return len(results["errors"]) > 0
+
+
 def main():
     app()
 
