@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from kreuzberg import extract_file_sync, ExtractionConfig
 from .data_models import Document
@@ -38,11 +39,12 @@ class KreuzbergLoader(BaseLoader):
         "nginx", "apache", "haproxy", "traefik",
     }
 
-    def __init__(self, disable_ocr: bool = False, **kwargs: dict):
+    def __init__(self, disable_ocr: bool = False, max_workers: int = 4, **kwargs: dict):
         super().__init__(**kwargs)
         self._gitignore_patterns: set = set()
         self._disable_ocr = disable_ocr
         self._config = ExtractionConfig(disable_ocr=True) if disable_ocr else None
+        self._max_workers = max_workers
 
     def _merge_gitignore(self, parent_patterns: set, child_patterns: set) -> set:
         merged = parent_patterns.copy()
@@ -134,7 +136,6 @@ class KreuzbergLoader(BaseLoader):
             "ps1": "powershell",
             "vim": "vim",
             "vimrc": "vim",
-            "elisp": "elisp",
             "emacs": "elisp",
             "hs": "haskell",
             "ml": "ocaml",
@@ -201,7 +202,25 @@ class KreuzbergLoader(BaseLoader):
         }
         return fallback_map.get(ext_clean, ext_clean)
 
-    def _walk_dir(self, dir_path: Path, relative_path: str, patterns: set, documents: list[Document], skipped_files: list[tuple[str, str]]):
+    def _extract_file(self, entry: Path, relative_path: str) -> Document | None:
+        try:
+            config = self._config
+            if config is None:
+                ext = entry.suffix.lstrip(".").lower()
+                if ext in IMAGE_EXTENSIONS:
+                    config = ExtractionConfig(disable_ocr=True)
+            result = extract_file_sync(entry, config=config)
+            detected_lang = result.get_detected_language()
+            if not detected_lang:
+                detected_lang = self._language_from_extension(entry.suffix)
+            doc = Document(result.content, entry.name, language=detected_lang)
+            if relative_path:
+                doc.filepath = relative_path
+            return doc
+        except Exception:
+            return None
+
+    def _walk_dir(self, dir_path: Path, relative_path: str, patterns: set, files: list[tuple[Path, str]]):
         for entry in sorted(dir_path.iterdir()):
             if entry.is_file():
                 if entry.name == ".gitignore":
@@ -209,25 +228,8 @@ class KreuzbergLoader(BaseLoader):
                 if self._should_skip_file(entry.name, relative_path, patterns):
                     continue
                 if not self._validate_file_format(entry):
-                    skipped_files.append((entry.name, entry.suffix.lstrip(".")))
                     continue
-                try:
-                    config = self._config
-                    if config is None:
-                        ext = entry.suffix.lstrip(".").lower()
-                        if ext in IMAGE_EXTENSIONS:
-                            config = ExtractionConfig(disable_ocr=True)
-                    result = extract_file_sync(entry, config=config)
-                    detected_lang = result.get_detected_language()
-                    if not detected_lang:
-                        detected_lang = self._language_from_extension(entry.suffix)
-                    doc = Document(result.content, entry.name, language=detected_lang)
-                    if relative_path:
-                        doc.filepath = relative_path
-                    documents.append(doc)
-                except Exception:
-                    skipped_files.append((entry.name, entry.suffix.lstrip(".") or "no extension"))
-                    continue
+                files.append((entry, relative_path))
             elif entry.is_dir():
                 subdir_ignore = entry / ".gitignore"
                 child_patterns = set()
@@ -240,21 +242,33 @@ class KreuzbergLoader(BaseLoader):
                 subdir_relative = str(Path(relative_path) / entry.name) if relative_path else entry.name
                 if self._is_dir_excluded(entry.name, merged_patterns):
                     continue
-                self._walk_dir(entry, subdir_relative, merged_patterns, documents, skipped_files)
+                self._walk_dir(entry, subdir_relative, merged_patterns, files)
 
     def load_files_from_dir(self, path: str):
-        documents: list[Document] = []
-        skipped_files: list[tuple[str, str]] = []
+        files: list[tuple[Path, str]] = []
         root_patterns = self._load_gitignore(Path(path))
-        self._walk_dir(Path(path), "", root_patterns, documents, skipped_files)
-        if skipped_files:
-            extensions = set(ext for _, ext in skipped_files)
-            print(f"Skipped {len(skipped_files)} unsupported file(s): {', '.join(sorted(extensions))}")
+        self._walk_dir(Path(path), "", root_patterns, files)
+
+        documents = []
+        skipped = []
+
+        with ThreadPoolExecutor(max_workers=self._max_workers) as executor:
+            futures = {executor.submit(self._extract_file, entry, rel_path): (entry, rel_path) for entry, rel_path in files}
+            for future in as_completed(futures):
+                entry, rel_path = futures[future]
+                result = future.result()
+                if result:
+                    documents.append(result)
+                else:
+                    skipped.append((entry.name, entry.suffix.lstrip(".") or "no extension"))
+
+        if skipped:
+            extensions = set(ext for _, ext in skipped)
+            print(f"Skipped {len(skipped)} unsupported file(s): {', '.join(sorted(extensions))}")
         return documents
 
 
 def init_loader(loader: str, **kwargs: dict):
-    """Initialize a loader by name using abstract base class discovery."""
     for cls in BaseLoader.__subclasses__():
         if hasattr(cls, "name") and cls.name == loader:
             return cls(**kwargs)
