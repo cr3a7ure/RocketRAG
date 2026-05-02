@@ -80,7 +80,9 @@ class RocketRAG:
             self.metadata,
         )
 
-    def prepare(self, recreate: bool = False, dry_run: bool = False) -> list[Document] | None:
+    def prepare(
+        self, recreate: bool = False, dry_run: bool = False, incremental: bool = False
+    ) -> list[Document] | None:
         if self.loader is None:
             raise ValueError("Loader is not defined.")
         if self.data_dir is None:
@@ -90,8 +92,19 @@ class RocketRAG:
         if dry_run:
             return documents
 
+        if incremental:
+            stale = self.db.get_stale_filenames(documents)
+            if stale:
+                print(f"Incremental: {len(stale)} file(s) changed, re-indexing...")
+                documents = [d for d in documents if (d.filepath or d.filename) in stale]
+            else:
+                print("Incremental: No files changed, skipping indexing.")
+                return None
+
         self.db.create_collection_if_not_exists(recreate)
         self.db.add_documents(documents)
+        if incremental:
+            self.db.update_file_index(documents)
         return None
 
     @ensure_llm_loaded

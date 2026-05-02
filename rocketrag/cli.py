@@ -101,6 +101,7 @@ def prepare(
     ),
     recreate: bool = typer.Option(False, help="Recreate the collection if it exists"),
     dry_run: bool = typer.Option(False, help="Check files without inserting to database"),
+    incremental: bool = typer.Option(False, help="Only index files that have changed"),
 ):
     """Prepare the RAG system by processing documents and creating embeddings."""
     imports = _lazy_imports()
@@ -145,7 +146,7 @@ def prepare(
                 for doc in docs:
                     print(f"  - {doc.filename} ({len(doc.chunks)} chunks)")
             continue
-        rag.prepare(recreate)
+        rag.prepare(recreate, incremental=incremental)
 
 
 @app.command()
