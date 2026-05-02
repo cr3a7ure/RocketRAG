@@ -456,6 +456,29 @@ tools:
         type: integer
         required: false
         default: 0
+
+  - name: rocketrag-ingest
+    description: Ingest a directory into the vector database
+    arguments:
+      - name: directory
+        type: string
+        required: true
+        description: Path to directory to ingest
+      - name: collection_name
+        type: string
+        required: false
+        default: localdev
+        description: Collection name (default: localdev)
+      - name: max_workers
+        type: integer
+        required: false
+        default: 4
+        description: Parallel workers for extraction
+      - name: incremental
+        type: boolean
+        required: false
+        default: true
+        description: Only index changed files
 ```
 
 ## 🛠️ Development
@@ -481,6 +504,57 @@ ruff check .
 ruff format .
 ```
 
+## 🐳 Docker Deployment
+
+Deploy RocketRAG using Docker for consistent environments across systems.
+
+### Quick Start
+
+```bash
+# Build and start all services
+docker-compose up -d
+
+# Or build manually
+docker build -t rocketrag .
+docker run -p 8000:8000 -v ./data:/data rocketrag server --port 8000
+```
+
+### Services
+
+| Service | Port | Description |
+|---------|------|-------------|
+| `rocketrag` | 8000 | Web server with REST API |
+| `rocketrag-mcp` | 8001 | MCP server for AI agent integration |
+
+### Data Persistence
+
+Mount volumes to persist data:
+
+```yaml
+volumes:
+  - ./data:/data        # Document directory
+  - ./rag.db:/data/rag.db  # Vector database
+```
+
+### Environment Variables
+
+```bash
+PYTHONUNBUFFERED=1  # Ensure output is not buffered
+```
+
+### Examples
+
+```bash
+# Start web server
+docker-compose up rocketrag
+
+# Start MCP server only
+docker-compose up rocketrag-mcp
+
+# Ingest a directory via MCP
+# Use ingest_directory tool with directory="/data/my-project"
+```
+
 ## 📊 Performance
 
 RocketRAG is designed for speed:
@@ -491,6 +565,8 @@ RocketRAG is designed for speed:
 - **Retrieval**: Sub-millisecond vector search with Milvus Lite
 - **Generation**: GGUF quantization for 4x faster inference
 - **Dry-run**: Check files before indexing to catch problems early
+- **Incremental Indexing**: Skip unchanged files using mtime/size tracking
+- **Git Source Tracking**: Auto-captures repo URL, branch, and commit for traceability
 
 ## 🤝 Contributing
 
