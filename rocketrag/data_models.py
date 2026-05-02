@@ -9,6 +9,8 @@ class Document:
     chunks: list[str] = field(default_factory=list)
     language: Optional[str] = None
     filepath: Optional[str] = None
+    mtime: Optional[float] = None  # file modification time
+    size: Optional[int] = None  # file size in bytes
 
 
 @dataclass
