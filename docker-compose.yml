@@ -1,0 +1,42 @@
+services:
+  rocketrag:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: rocketrag:latest
+    container_name: rocketrag
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/data
+      - ./rag.db:/data/rag.db
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: server --port 8000 --host 0.0.0.0
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  rocketrag-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: rocketrag:latest
+    container_name: rocketrag-mcp
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./data:/data
+      - ./rag.db:/data/rag.db
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: mcp-server --transport http --host 0.0.0.0 --port 8000 --db-path /data/rag.db --collection-name localdev
+    restart: unless-stopped
+
+volumes:
+  data:
+    driver: local
