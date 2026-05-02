@@ -60,6 +60,10 @@ class RocketRAG:
         self.loader = loader
         self.loader_config = loader.config
 
+        from .utils import get_git_repo_info
+
+        git_repo_info = get_git_repo_info(self.data_dir) if self.data_dir else None
+
         self.metadata = construct_metadata_dict(
             self.data_dir,
             self.chonker,
@@ -70,6 +74,7 @@ class RocketRAG:
             self.loader_config,
             self.db_path,
             self.collection_name,
+            git_repo_info=git_repo_info,
         )
 
         self.db = MilvusLiteDB(

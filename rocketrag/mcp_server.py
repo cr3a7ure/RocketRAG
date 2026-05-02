@@ -154,6 +154,93 @@ def create_mcp_server(
         except Exception as e:
             return [{"error": str(e)}]
 
+    @mcp.tool()
+    def ingest_directory(
+        directory: str,
+        collection_name: str = "localdev",
+        max_workers: int = 4,
+        incremental: bool = True,
+        recreate: bool = False,
+    ) -> dict:
+        """Ingest a directory of documents into the vector database.
+
+        Args:
+            directory: Path to the directory to ingest
+            collection_name: Name of the collection (default: server's collection)
+            max_workers: Number of parallel workers for extraction (default: 4)
+            incremental: Only index changed files (default: True)
+            recreate: Recreate collection before ingesting (default: False)
+
+        Returns:
+            Dictionary with status, files_processed, and chunks_added
+        """
+        try:
+            from .loaders import init_loader
+            from .chonk import init_chonker
+            from .vectors import init_vectorizer
+            from .utils import construct_metadata_dict, get_git_repo_info
+
+            target_collection = collection_name or db.collection_name
+
+            loader = init_loader("kreuzberg", max_workers=max_workers)
+            chunker = init_chonker("chonkie", method="semantic", chunk_size=512)
+            vectorizer = init_vectorizer(
+                "sentence_transformers",
+                model_name=vectorizer_args.get("model_name", "minishlab/potion-multilingual-128M"),
+            )
+
+            git_repo_info = get_git_repo_info(directory)
+            metadata = construct_metadata_dict(
+                directory, chunker, chunker.config, vectorizer, vectorizer.config, loader, loader.config, db_path, target_collection, git_repo_info=git_repo_info
+            )
+
+            from .db import MilvusLiteDB
+            target_db = MilvusLiteDB(
+                db_path=db_path,
+                collection_name=target_collection,
+                vectorizer=vectorizer,
+                chunker=chunker,
+                metadata=metadata,
+            )
+
+            documents = loader.load_files_from_dir(directory)
+            files_processed = len(documents)
+
+            if incremental:
+                stale = target_db.get_stale_filenames(documents)
+                if stale:
+                    documents = [d for d in documents if (d.filepath or d.filename) in stale]
+                else:
+                    documents = []
+
+            if not documents:
+                return {
+                    "status": "skipped",
+                    "message": "No files changed, skipping ingestion",
+                    "files_processed": 0,
+                    "chunks_added": 0,
+                }
+
+            if recreate:
+                target_db.client.drop_collection(target_collection)
+
+            target_db.create_collection_if_not_exists(recreate=False)
+            target_db.add_documents(documents)
+
+            if incremental:
+                target_db.update_file_index(documents)
+
+            total_chunks = sum(len(doc.chunks) for doc in documents)
+
+            return {
+                "status": "success",
+                "files_processed": files_processed,
+                "chunks_added": total_chunks,
+                "collection": target_collection,
+            }
+        except Exception as e:
+            return {"status": "error", "error": str(e)}
+
     return mcp
 
 
