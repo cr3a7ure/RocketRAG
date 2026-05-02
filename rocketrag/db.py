@@ -114,6 +114,62 @@ class MilvusLiteDB:
         except Exception:
             return set()
 
+    def _get_file_index_path(self) -> str:
+        """Get the path for the file index sidecar file stored alongside DB, not in data dir."""
+        db_dir = Path(self.db_path).parent
+        return str(db_dir / f".{self.collection_name}.file_index")
+
+    def _load_file_index(self) -> dict[str, dict]:
+        """Load file index (filepath -> {mtime, size}) from sidecar file."""
+        try:
+            index_path = self._get_file_index_path()
+            if os.path.exists(index_path):
+                with open(index_path, "r", encoding="utf-8") as f:
+                    return json.load(f)
+        except Exception as e:
+            print(f"Warning: Failed to load file index: {e}")
+        return {}
+
+    def _save_file_index(self, index: dict[str, dict]) -> None:
+        """Save file index (filepath -> {mtime, size}) to sidecar file."""
+        try:
+            index_path = self._get_file_index_path()
+            with open(index_path, "w", encoding="utf-8") as f:
+                json.dump(index, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"Warning: Failed to save file index: {e}")
+
+    def get_stale_filenames(
+        self, documents: list[Document], ignore_missing: bool = False
+    ) -> set[str]:
+        """
+        Get filenames that have changed (different mtime or size) or are new.
+        Returns set of filenames that need re-indexing.
+        """
+        index = self._load_file_index()
+        stale = set()
+
+        for doc in documents:
+            key = doc.filepath or doc.filename
+            current_meta = {"mtime": doc.mtime, "size": doc.size}
+            if key not in index:
+                if not ignore_missing:
+                    stale.add(key)
+            else:
+                stored_meta = index[key]
+                if stored_meta.get("mtime") != current_meta["mtime"] or stored_meta.get("size") != current_meta["size"]:
+                    stale.add(key)
+
+        return stale
+
+    def update_file_index(self, documents: list[Document]) -> None:
+        """Update file index with current mtime/size for processed documents."""
+        index = self._load_file_index()
+        for doc in documents:
+            key = doc.filepath or doc.filename
+            index[key] = {"mtime": doc.mtime, "size": doc.size}
+        self._save_file_index(index)
+
     def add_documents(self, documents: list[Document]):
         if self.chunker:
             documents = self.chunker.chunk_batch(documents)
