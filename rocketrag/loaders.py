@@ -214,8 +214,10 @@ class KreuzbergLoader(BaseLoader):
             if not detected_lang:
                 detected_lang = self._language_from_extension(entry.suffix)
             doc = Document(result.content, entry.name, language=detected_lang)
-            if relative_path:
-                doc.filepath = relative_path
+            doc.filepath = relative_path
+            stat = entry.stat()
+            doc.mtime = stat.st_mtime
+            doc.size = stat.st_size
             return doc
         except Exception:
             return None
