@@ -37,6 +37,7 @@ class KreuzbergLoader(BaseLoader):
         "ini", "cfg", "conf", "properties",
         "makefile", "cmake", "gradle", "maven", "ant", "build", "bazel",
         "nginx", "apache", "haproxy", "traefik",
+        "scad", "step", "stl", "obj", "iges", "blend",  # CAD files
     }
 
     def __init__(self, disable_ocr: bool = False, max_workers: int = 4, **kwargs: dict):
