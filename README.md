@@ -67,6 +67,21 @@ rocketrag prepare --data-dir ./documents
 # Check files without indexing (dry-run)
 rocketrag prepare --data-dir ./documents --dry-run
 
+# Incremental index (only changed files)
+rocketrag prepare --data-dir ./documents --incremental
+
+# Search the vector database
+rocketrag search "query" --collection-name localdev --top-k 5
+
+# List indexed files
+rocketrag list-files --db-path rag.db
+
+# Show database statistics
+rocketrag stats --collection-name localdev
+
+# Ingest a directory (with auto git detection)
+rocketrag ingest ./company --collection-name localdev --incremental
+
 # Ask questions via CLI
 rocketrag ask "What are the key findings?"
 

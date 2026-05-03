@@ -431,6 +431,209 @@ def mcp_server(
 
 
 @app.command()
+def search(
+    query: str = typer.Argument(..., help="Search query"),
+    db_path: str = typer.Option("rag.db", help="Path to the database file"),
+    collection_name: str = typer.Option("rag", help="Collection to search"),
+    top_k: int = typer.Option(5, help="Number of results to return"),
+    vectorizer_args: str = typer.Option(
+        '{"model_name": "minishlab/potion-multilingual-128M"}',
+        help="JSON string with vectorizer configuration",
+    ),
+):
+    """Search the vector database for relevant chunks."""
+    imports = _lazy_imports()
+
+    vectorizer_config = json.loads(vectorizer_args)
+    vectorizer = imports["init_vectorizer"](
+        "sentence_transformers", **vectorizer_config
+    )
+
+    db = imports["MilvusLiteDB"](
+        db_path=db_path,
+        collection_name=collection_name,
+        vectorizer=vectorizer,
+    )
+
+    results = db.search(query, top_k=top_k)
+    console = Console()
+
+    if not results:
+        console.print("[yellow]No results found.[/yellow]")
+        return
+
+    from rich.table import Table
+    table = Table(title=f"Search results for: {query}")
+    table.add_column("Score", style="green", width=10)
+    table.add_column("File", style="cyan")
+    table.add_column("Chunk", style="white")
+
+    for r in results:
+        chunk_preview = r.chunk[:100] + "..." if len(r.chunk) > 100 else r.chunk
+        table.add_row(f"{r.score:.4f}", r.filename, chunk_preview)
+
+    console.print(table)
+
+
+@app.command()
+def list_files(
+    db_path: str = typer.Option("rag.db", help="Path to the database file"),
+    collection_name: str = typer.Option("rag", help="Collection to query"),
+    vectorizer_args: str = typer.Option(
+        '{"model_name": "minishlab/potion-multilingual-128M"}',
+        help="JSON string with vectorizer configuration",
+    ),
+):
+    """List all files indexed in the database."""
+    imports = _lazy_imports()
+
+    vectorizer_config = json.loads(vectorizer_args)
+    vectorizer = imports["init_vectorizer"](
+        "sentence_transformers", **vectorizer_config
+    )
+
+    db = imports["MilvusLiteDB"](
+        db_path=db_path,
+        collection_name=collection_name,
+        vectorizer=vectorizer,
+    )
+
+    files = db.get_unique_filenames()
+    console = Console()
+
+    console.print(f"[bold]Total files: {len(files)}[/bold]")
+    for f in sorted(files):
+        console.print(f"  • {f}")
+
+
+@app.command()
+def stats(
+    db_path: str = typer.Option("rag.db", help="Path to the database file"),
+    collection_name: str = typer.Option("rag", help="Collection to query"),
+    vectorizer_args: str = typer.Option(
+        '{"model_name": "minishlab/potion-multilingual-128M"}',
+        help="JSON string with vectorizer configuration",
+    ),
+):
+    """Show database statistics."""
+    imports = _lazy_imports()
+
+    vectorizer_config = json.loads(vectorizer_args)
+    vectorizer = imports["init_vectorizer"](
+        "sentence_transformers", **vectorizer_config
+    )
+
+    db = imports["MilvusLiteDB"](
+        db_path=db_path,
+        collection_name=collection_name,
+        vectorizer=vectorizer,
+    )
+
+    total = db.get_total_count()
+    files = db.get_unique_filenames()
+    metadata = db.get_collection_metadata()
+
+    console = Console()
+    console.print(Panel(
+        f"[bold]Total chunks:[/bold] {total}\n"
+        f"[bold]Unique files:[/bold] {len(files)}\n"
+        f"[bold]Dimension:[/bold] {db.dimension}\n"
+        f"[bold]Vectorizer:[/bold] {metadata.get('vectorizer', 'unknown')}\n"
+        f"[bold]Loader:[/bold] {metadata.get('loader', 'unknown')}\n"
+        f"[bold]Chunker:[/bold] {metadata.get('chonker', 'unknown')}",
+        title="Database Statistics",
+        border_style="cyan"
+    ))
+
+
+@app.command()
+def ingest(
+    directory: str = typer.Argument(..., help="Directory to ingest"),
+    db_path: str = typer.Option("rag.db", help="Path to the database file"),
+    collection_name: str = typer.Option("localdev", help="Collection name"),
+    max_workers: int = typer.Option(4, help="Parallel workers for extraction"),
+    incremental: bool = typer.Option(True, help="Only index changed files"),
+    recreate: bool = typer.Option(False, help="Recreate collection before ingesting"),
+    chonker_args: str = typer.Option(
+        '{"method": "recursive", "chunk_size": 500}',
+        help="JSON string with chunker configuration",
+    ),
+    vectorizer_args: str = typer.Option(
+        '{"model_name": "minishlab/potion-multilingual-128M"}',
+        help="JSON string with vectorizer configuration",
+    ),
+):
+    """Ingest a directory into the vector database."""
+    imports = _lazy_imports()
+
+    if not os.path.isdir(directory):
+        console = Console()
+        console.print(Panel(f"Directory not found: {directory}", title="Error", border_style="red"))
+        return
+
+    chonker_config = json.loads(chonker_args)
+    vectorizer_config = json.loads(vectorizer_args)
+
+    vectorizer = imports["init_vectorizer"](
+        "sentence_transformers", **vectorizer_config
+    )
+    chunker = imports["init_chonker"]("chonkie", **chonker_config)
+    loader = imports["init_loader"]("kreuzberg", max_workers=max_workers)
+
+    from .utils import construct_metadata_dict, get_git_repo_info
+
+    git_repo_info = get_git_repo_info(directory)
+    metadata = construct_metadata_dict(
+        directory, chunker, chunker.config, vectorizer, vectorizer.config,
+        loader, loader.config, db_path, collection_name, git_repo_info=git_repo_info
+    )
+
+    db = imports["MilvusLiteDB"](
+        db_path=db_path,
+        collection_name=collection_name,
+        vectorizer=vectorizer,
+        chunker=chunker,
+        metadata=metadata,
+    )
+
+    documents = loader.load_files_from_dir(directory)
+    files_processed = len(documents)
+
+    if incremental:
+        stale = db.get_stale_filenames(documents)
+        if stale:
+            console = Console()
+            console.print(f"Incremental: {len(stale)} file(s) changed, re-indexing...")
+            documents = [d for d in documents if (d.filepath or d.filename) in stale]
+        else:
+            console = Console()
+            console.print("Incremental: No files changed, skipping ingestion.")
+            return
+
+    if not documents:
+        return
+
+    if recreate:
+        db.client.drop_collection(collection_name)
+
+    db.create_collection_if_not_exists(recreate=False)
+    db.add_documents(documents)
+
+    if incremental:
+        db.update_file_index(documents)
+
+    total_chunks = sum(len(doc.chunks) for doc in documents)
+    console = Console()
+    console.print(Panel(
+        f"[bold]Files processed:[/bold] {files_processed}\n"
+        f"[bold]Chunks added:[/bold] {total_chunks}\n"
+        f"[bold]Collection:[/bold] {collection_name}",
+        title="Ingest Complete",
+        border_style="green"
+    ))
+
+
+@app.command()
 def check(
     data_dir: str = typer.Argument(".", help="Directory to scan"),
     disable_ocr: bool = typer.Option(False, help="Disable OCR when scanning"),
