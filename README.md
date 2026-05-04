@@ -596,6 +596,18 @@ docker build -f Dockerfile.slim -t rocketrag .
   --incremental
 ```
 
+> **Note:** The script mounts the parent directory of `--db-path` as a Docker volume, so `rag.db` becomes a directory mount point. To run subsequent commands (stats, search, etc.), mount the same directory:
+>
+> ```bash
+> # Run stats with volume mount
+> docker run --rm -v "$(pwd):/data" -w /data rocketrag \
+>   rocketrag stats --db-path rag.db --collection-name my-collection
+>
+> # Search
+> docker run --rm -v "$(pwd):/data" -w /data rocketrag \
+>   rocketrag search "your query" --db-path rag.db --collection-name my-collection
+> ```
+
 ## 📊 Performance
 
 RocketRAG is designed for speed:
