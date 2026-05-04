@@ -570,6 +570,32 @@ docker-compose up rocketrag-mcp
 # Use ingest_directory tool with directory="/data/my-project"
 ```
 
+### Docker Ingest Script
+
+Use the `ingest-docker.sh` script to ingest directories via Docker:
+
+```bash
+# Build image (one-time)
+docker build -t rocketrag .
+
+# Basic usage
+./ingest-docker.sh ./my-project
+
+# Custom DB and collection
+./ingest-docker.sh ./docs --db-path project.db --collection myapp
+
+# With e5 model and incremental mode
+./ingest-docker.sh /data/repo --collection tech --model intfloat/e5-base-v2 --incremental
+
+# Full options
+./ingest-docker.sh /path/to/docs \
+  --db-path rag.db \
+  --collection my-collection \
+  --model intfloat/e5-base-v2 \
+  --max-workers 8 \
+  --incremental
+```
+
 ## 📊 Performance
 
 RocketRAG is designed for speed:

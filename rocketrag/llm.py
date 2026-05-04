@@ -1,6 +1,5 @@
 from contextlib import redirect_stderr
 from io import StringIO
-from llama_cpp import Llama
 from rich.console import Console
 from .base import BaseLLM
 
@@ -30,6 +29,8 @@ class LLamaLLM(BaseLLM):
         super().__init__(**kwargs)
 
     def load(self):
+        from llama_cpp import Llama
+
         with console.status("Loading model...") as status:
             if self.verbose:
                 self.llm = Llama.from_pretrained(
