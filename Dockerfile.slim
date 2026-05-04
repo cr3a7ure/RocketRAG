@@ -1,0 +1,41 @@
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgomp1 \
+    libomp-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install core deps WITHOUT llama-cpp-python (only needed for LLM inference)
+RUN pip install --no-cache-dir \
+    "chonkie[code,model2vec]>=1.6.3" \
+    "dashscope>=1.20.0" \
+    "fastapi>=0.116.1" \
+    "jinja2>=3.1.0" \
+    "kreuzberg>=4.8.5" \
+    "mcp>=1.0.0" \
+    "numpy>=1.24.0" \
+    "openai>=1.0.0" \
+    "pymilvus[milvus_lite]>=2.6.0" \
+    "rich>=13.0.0" \
+    "sentence-transformers>=5.1.0" \
+    "typer>=0.16.1" \
+    "uvicorn>=0.32.1"
+
+# Copy source and install rocketrag without deps (deps already installed above)
+COPY . /app
+WORKDIR /app
+RUN pip install --no-cache-dir --no-deps .
+
+WORKDIR /data
+
+VOLUME ["/data"]
+
+EXPOSE 8000
+
+ENTRYPOINT ["rocketrag"]
+CMD ["--help"]
