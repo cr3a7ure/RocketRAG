@@ -22,6 +22,12 @@ usage() {
     echo "Examples:"
     echo "  $0 ./my-project --db-path project.db --collection myapp"
     echo "  $0 /data/docs --collection tech-docs --model intfloat/e5-base-v2"
+    echo ""
+    echo "  # Build slim image first (skip this if already built):"
+    echo "  docker build -f Dockerfile.slim -t rocketrag ."
+    echo ""
+    echo "  # Ingest current directory (mounts as volume in Docker):"
+    echo "  $0 ."
     exit 1
 }
 
@@ -88,8 +94,7 @@ echo "  Incremental:  $INCREMENTAL"
 echo "=========================================="
 echo ""
 
-# Build command
-CMD="python -m rocketrag prepare '$DIR_ABS' --db-path '$DB_PATH' --collection-name '$COLLECTION' --vectorizer-args '{\"model_name\": \"$MODEL\"}' --max-workers $MAX_WORKERS"
+CMD="python -m rocketrag prepare '/data/$DIR_NAME' --db-path '$DB_PATH' --collection-name '$COLLECTION' --vectorizer-args '{\"model_name\": \"$MODEL\"}' --max-workers $MAX_WORKERS"
 
 if [ "$INCREMENTAL" = "true" ]; then
     CMD="$CMD --incremental"
