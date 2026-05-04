@@ -575,8 +575,8 @@ docker-compose up rocketrag-mcp
 Use the `ingest-docker.sh` script to ingest directories via Docker:
 
 ```bash
-# Build image (one-time)
-docker build -t rocketrag .
+# Build slim image (one-time, ~30s vs ~5min for full build with llama.cpp)
+docker build -f Dockerfile.slim -t rocketrag .
 
 # Basic usage
 ./ingest-docker.sh ./my-project
@@ -585,10 +585,10 @@ docker build -t rocketrag .
 ./ingest-docker.sh ./docs --db-path project.db --collection myapp
 
 # With e5 model and incremental mode
-./ingest-docker.sh /data/repo --collection tech --model intfloat/e5-base-v2 --incremental
+./ingest-docker.sh ./repo --collection tech --model intfloat/e5-base-v2 --incremental
 
 # Full options
-./ingest-docker.sh /path/to/docs \
+./ingest-docker.sh ./docs \
   --db-path rag.db \
   --collection my-collection \
   --model intfloat/e5-base-v2 \
