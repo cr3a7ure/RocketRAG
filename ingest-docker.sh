@@ -100,10 +100,9 @@ if [ "$INCREMENTAL" = "true" ]; then
     CMD="$CMD --incremental"
 fi
 
-# Run in docker
 docker run --rm \
     --entrypoint sh \
-    -v "$(pwd)/$DB_PATH:/data/$DB_PATH" \
+    -v "$(dirname "$(pwd)/$DB_PATH"):/data" \
     -v "$DIR_ABS:/data/$DIR_NAME:ro" \
     -w /data \
     rocketrag \
@@ -111,4 +110,5 @@ docker run --rm \
 
 echo ""
 echo "Done! Data stored in: $(pwd)/$DB_PATH"
+echo "Note: DB path is relative to the directory you ran the script from"
 echo "Collection: $COLLECTION"
