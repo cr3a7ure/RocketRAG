@@ -333,6 +333,7 @@ print(result["sources"])
 - 🗂️ **Multi-repo source tracking** with git remote URL metadata
 - 🚫 **Automatic directory filtering** (skips node_modules, dist, venv, .git, etc.)
 - 🔍 **Metadata filtering** in search results
+- 🎯 **Project-aware search** (quick_search auto-resolves dependencies from package.json/pyproject.toml)
 
 ## 🤖 MCP Server
 
