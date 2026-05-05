@@ -372,11 +372,13 @@ rocketrag mcp-server --transport http --host 0.0.0.0 --port 8000 \
 
 | Tool | Description |
 |------|-------------|
-| `search(query, top_k)` | Vector similarity search across all chunks |
+| `search(query, top_k, filter)` | Vector similarity search with optional metadata filter |
+| `search_all(query, top_k, filter)` | Search all collections with optional filter |
 | `list_files()` | List all indexed filenames |
 | `get_file_chunks(filename)` | Get all chunks from a specific file |
 | `get_stats()` | Get database statistics |
 | `get_all_chunks(limit, offset)` | Paginated chunk retrieval |
+| `ingest_directory(directory, ...)` | Ingest a directory into the vector database |
 
 ### HTTP Endpoints
 

@@ -27,24 +27,27 @@ def create_mcp_server(
     )
 
     @mcp.tool()
-    def search(query: str, top_k: int = 5, collection_name: str = None) -> list[dict]:
+    def search(query: str, top_k: int = 5, collection_name: str = None, filter: str = None) -> list[dict]:
         """Search the database for relevant chunks.
 
         Args:
             query: The search query text
             top_k: Number of results to return (default: 5)
             collection_name: Specific collection to search (default: search default)
+            filter: Milvus filter expression (e.g., 'source like "%auth%"')
 
         Returns:
-            List of search results with chunk text, filename, and score
+            List of search results with chunk text, filename, score, and source
         """
         try:
-            results = db.search(query, top_k=top_k, collection_name=collection_name)
+            results = db.search(query, top_k=top_k, collection_name=collection_name, filter=filter)
             return [
                 {
                     "chunk": r.chunk,
                     "filename": r.filename,
                     "score": r.score,
+                    "source": r.source or "",
+                    "language": r.language or "",
                 }
                 for r in results
             ]
@@ -52,15 +55,16 @@ def create_mcp_server(
             return [{"error": str(e), "results": []}]
 
     @mcp.tool()
-    def search_all(query: str, top_k: int = 5) -> list[dict]:
+    def search_all(query: str, top_k: int = 5, filter: str = None) -> list[dict]:
         """Search ALL collections in the database for relevant chunks.
 
         Args:
             query: The search query text
             top_k: Number of results to return (default: 5)
+            filter: Milvus filter expression (e.g., 'source like "%auth%"')
 
         Returns:
-            List of search results with chunk text, filename, and score
+            List of search results with chunk text, filename, score, and source
         """
         try:
             results = db.search_all(query, top_k=top_k)
@@ -69,6 +73,8 @@ def create_mcp_server(
                     "chunk": r.chunk,
                     "filename": r.filename,
                     "score": r.score,
+                    "source": r.source or "",
+                    "language": r.language or "",
                 }
                 for r in results
             ]
