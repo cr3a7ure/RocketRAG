@@ -578,14 +578,17 @@ Use the `ingest-docker.sh` script to ingest directories via Docker:
 # Build slim image (one-time, ~30s vs ~5min for full build with llama.cpp)
 docker build -f Dockerfile.slim -t rocketrag .
 
-# Basic usage
+# Basic usage (CPU-optimized, uses potion model)
 ./ingest-docker.sh ./my-project
 
 # Custom DB and collection
 ./ingest-docker.sh ./docs --db-path project.db --collection myapp
 
-# With e5 model and incremental mode
-./ingest-docker.sh ./repo --collection tech --model intfloat/e5-base-v2 --incremental
+# With e5 model and GPU support (for faster vectorization)
+./ingest-docker.sh ./repo --collection tech --model intfloat/e5-base-v2 --gpu
+
+# Incremental mode (skip unchanged files)
+./ingest-docker.sh ./repo --incremental
 
 # Full options
 ./ingest-docker.sh ./docs \
@@ -593,8 +596,29 @@ docker build -f Dockerfile.slim -t rocketrag .
   --collection my-collection \
   --model intfloat/e5-base-v2 \
   --max-workers 8 \
-  --incremental
+  --incremental \
+  --gpu
 ```
+
+#### GPU Support
+
+When using `--gpu`, Docker passes GPU access to the container via `--gpus all`. This enables:
+
+- **CUDA GPU acceleration** for vectorization models (e5-base-v2, e5-large-v2)
+- **Significantly faster embedding** on large document sets
+- **Better CPU utilization** since GPU handles vectorization
+
+**Requirements:**
+- NVIDIA GPU with CUDA drivers installed
+- [`nvidia-container-toolkit`](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) configured
+
+**Model recommendations:**
+
+| Model | CPU Speed | GPU Needed? | Use Case |
+|-------|-----------|-------------|----------|
+| `minishlab/potion-multilingual-128M` | Fast | No | Default, CPU-only Docker |
+| `intfloat/e5-base-v2` | Slow on CPU | Yes (recommended) | Higher quality embeddings |
+| `intfloat/e5-small-v2` | Moderate | Recommended | Lightweight GPU alternative |
 
 > **Note:** The script mounts the parent directory of `--db-path` as a Docker volume, so `rag.db` becomes a directory mount point. To run subsequent commands (stats, search, etc.), mount the same directory:
 >

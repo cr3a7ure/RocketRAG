@@ -7,9 +7,10 @@ COLLECTION="rag"
 MODEL="minishlab/potion-multilingual-128M"
 MAX_WORKERS=4
 INCREMENTAL="false"
+GPU="false"
 
 usage() {
-    echo "Usage: $0 <directory> [--db-path <path>] [--collection <name>] [--model <model>] [--max-workers <n>] [--incremental]"
+    echo "Usage: $0 <directory> [--db-path <path>] [--collection <name>] [--model <model>] [--max-workers <n>] [--incremental] [--gpu]"
     echo ""
     echo "Arguments:"
     echo "  directory          Directory to ingest (required)"
@@ -18,6 +19,7 @@ usage() {
     echo "  --model             Vectorizer model (default: minishlab/potion-multilingual-128M)"
     echo "  --max-workers       Parallel workers (default: 4)"
     echo "  --incremental       Enable incremental mode (default: false)"
+    echo "  --gpu               Enable GPU passthrough for Docker (default: false)"
     echo ""
     echo "Examples:"
     echo "  $0 ./my-project --db-path project.db --collection myapp"
@@ -28,6 +30,14 @@ usage() {
     echo ""
     echo "  # Ingest current directory (mounts as volume in Docker):"
     echo "  $0 ."
+    echo ""
+    echo "  # Ingest with GPU support (NVIDIA):"
+    echo "  $0 . --gpu"
+    echo ""
+    echo "Model recommendations:"
+    echo "  - minishlab/potion-multilingual-128M (default): Fast on CPU, no GPU needed"
+    echo "  - intfloat/e5-base-v2: Better quality but requires GPU for speed"
+    echo "  - intfloat/e5-small-v2: Lightweight alternative if GPU available"
     exit 1
 }
 
@@ -61,6 +71,10 @@ while [ $# -gt 0 ]; do
             INCREMENTAL="true"
             shift
             ;;
+        --gpu)
+            GPU="true"
+            shift
+            ;;
         *)
             echo "Unknown option: $1"
             usage
@@ -91,8 +105,14 @@ echo "  Collection:   $COLLECTION"
 echo "  Model:        $MODEL"
 echo "  Workers:      $MAX_WORKERS"
 echo "  Incremental:  $INCREMENTAL"
+echo "  GPU:          $GPU"
 echo "=========================================="
 echo ""
+
+DOCKER_GPU_FLAGS=""
+if [ "$GPU" = "true" ]; then
+    DOCKER_GPU_FLAGS="--gpus all"
+fi
 
 CMD="python -m rocketrag prepare '/data/$DIR_NAME' --db-path '$DB_PATH' --collection-name '$COLLECTION' --vectorizer-args '{\"model_name\": \"$MODEL\"}' --max-workers $MAX_WORKERS"
 
@@ -102,6 +122,7 @@ fi
 
 docker run --rm \
     --entrypoint sh \
+    $DOCKER_GPU_FLAGS \
     -v "$(dirname "$(pwd)/$DB_PATH"):/data" \
     -v "$DIR_ABS:/data/$DIR_NAME:ro" \
     -w /data \
