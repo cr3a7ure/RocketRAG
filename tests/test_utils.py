@@ -2,9 +2,20 @@
 
 import os
 import shutil
+import subprocess
+import tempfile
+from pathlib import Path
 from typing import List, Dict, Any
 
+import pytest
+
 from rocketrag.data_models import Document, SearchResult
+from rocketrag.utils import (
+    DEFAULT_IGNORE_DIRS,
+    should_ignore_path,
+    detect_git_repos,
+    get_repo_for_file,
+)
 
 
 def create_test_documents(num_docs: int = 3) -> List[Document]:
@@ -349,3 +360,120 @@ class TestDataManager:
         cleanup_test_files(*self.created_files, *self.created_dirs)
         self.created_files.clear()
         self.created_dirs.clear()
+
+
+class TestDefaultIgnoreDirs:
+    def test_contains_common_build_dirs(self):
+        assert "node_modules" in DEFAULT_IGNORE_DIRS
+        assert "dist" in DEFAULT_IGNORE_DIRS
+        assert "build" in DEFAULT_IGNORE_DIRS
+
+    def test_contains_venv_dirs(self):
+        assert "venv" in DEFAULT_IGNORE_DIRS
+        assert ".venv" in DEFAULT_IGNORE_DIRS
+        assert "env" in DEFAULT_IGNORE_DIRS
+
+    def test_contains_git_dirs(self):
+        assert ".git" in DEFAULT_IGNORE_DIRS
+
+    def test_contains_cache_dirs(self):
+        assert "__pycache__" in DEFAULT_IGNORE_DIRS
+        assert ".pytest_cache" in DEFAULT_IGNORE_DIRS
+        assert ".mypy_cache" in DEFAULT_IGNORE_DIRS
+
+
+class TestShouldIgnorePath:
+    def test_ignores_node_modules(self):
+        assert should_ignore_path("project/node_modules/package/index.js") is True
+
+    def test_ignores_venv_at_root(self):
+        assert should_ignore_path("venv/lib/python.py") is True
+
+    def test_ignores_dist_dir(self):
+        assert should_ignore_path("project/dist/bundle.js") is True
+
+    def test_ignores_git_dir(self):
+        assert should_ignore_path("project/.git/objects") is True
+
+    def test_ignores_gitignore_file(self):
+        assert should_ignore_path("project/.gitignore") is True
+
+    def test_ignores_pycache(self):
+        assert should_ignore_path("project/__pycache__/module.pyc") is True
+
+    def test_does_not_ignore_source_files(self):
+        assert should_ignore_path("project/src/main.py") is False
+        assert should_ignore_path("project/lib/utils.ts") is False
+
+    def test_does_not_ignore_normal_hidden_files(self):
+        assert should_ignore_path("project/.env") is False
+        assert should_ignore_path("project/.vscode/settings.json") is False
+
+
+class TestDetectGitRepos:
+    def test_detects_single_git_repo(self, temp_dir):
+        repo_dir = Path(temp_dir) / "test_repo"
+        repo_dir.mkdir()
+        (repo_dir / ".git").mkdir()
+
+        result = detect_git_repos(temp_dir)
+
+        assert len(result) == 1
+        assert (repo_dir / ".git").exists()
+
+    def test_returns_empty_for_no_repos(self, temp_dir):
+        result = detect_git_repos(temp_dir)
+        assert result == {}
+
+    def test_detects_multiple_nested_repos(self, temp_dir):
+        repo1 = Path(temp_dir) / "repo1"
+        repo2 = Path(temp_dir) / "repo2"
+        repo1.mkdir()
+        repo2.mkdir()
+        (repo1 / ".git").mkdir()
+        (repo2 / ".git").mkdir()
+
+        result = detect_git_repos(temp_dir)
+
+        assert len(result) == 2
+
+    def test_skips_node_modules_git_dirs(self, temp_dir):
+        repo_dir = Path(temp_dir) / "project"
+        node_mods = repo_dir / "node_modules" / "some-package"
+        repo_dir.mkdir()
+        node_mods.mkdir(parents=True)
+        (repo_dir / ".git").mkdir()
+
+        result = detect_git_repos(temp_dir)
+
+        assert len(result) == 1
+        repo_paths = list(result.keys())
+        assert str(repo_dir) in repo_paths
+
+
+class TestGetRepoForFile:
+    def test_maps_file_to_parent_repo(self):
+        repo_map = {
+            "/path/to/repo": {"url": "https://github.com/user/repo"}
+        }
+        result = get_repo_for_file("/path/to/repo/src/main.py", repo_map)
+        assert result == "https://github.com/user/repo"
+
+    def test_returns_none_for_unmapped_file(self):
+        repo_map = {
+            "/path/to/repo": {"url": "https://github.com/user/repo"}
+        }
+        result = get_repo_for_file("/path/to/other/project/src/main.py", repo_map)
+        assert result is None
+
+    def test_returns_none_for_empty_repo_map(self):
+        result = get_repo_for_file("/path/to/project/src/main.py", {})
+        assert result is None
+
+    def test_maps_to_deepest_matching_repo(self):
+        repo_map = {
+            "/path/to/repo": {"url": "https://github.com/user/repo"},
+            "/path/to/repo/nested": {"url": "https://github.com/user/nested"},
+        }
+        result = get_repo_for_file("/path/to/repo/nested/src/main.py", repo_map)
+        assert result == "https://github.com/user/nested"

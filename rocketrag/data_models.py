@@ -11,6 +11,7 @@ class Document:
     filepath: Optional[str] = None
     mtime: Optional[float] = None  # file modification time
     size: Optional[int] = None  # file size in bytes
+    source: Optional[str] = None  # git repo URL or identifier
 
 
 @dataclass
@@ -20,3 +21,4 @@ class SearchResult:
     score: float
     language: Optional[str] = None
     filepath: Optional[str] = None
+    source: Optional[str] = None  # git repo URL or identifier

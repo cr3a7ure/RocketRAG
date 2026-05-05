@@ -5,6 +5,106 @@ from pathlib import Path
 from datetime import datetime, timezone
 from .base import BaseVectorizer, BaseChunker, BaseLoader
 
+DEFAULT_IGNORE_DIRS = frozenset([
+    "node_modules", ".git", "venv", ".venv", "__pycache__",
+    ".pytest_cache", ".mypy_cache", ".ruff_cache", "dist", "build",
+    ".tox", ".nox", ".eggs", "*.egg-info", ".venv-cache",
+    "env", ".env", ".cache", ".npm", ".pip",
+])
+
+
+def should_ignore_path(rel_path: str, ignore_patterns: frozenset[str] | None = None) -> bool:
+    """Check if a path should be ignored based on ignore patterns."""
+    if ignore_patterns is None:
+        ignore_patterns = DEFAULT_IGNORE_DIRS
+
+    parts = Path(rel_path).parts
+    for i, part in enumerate(parts):
+        if part in ignore_patterns:
+            return True
+        if part.endswith(".gitignore"):
+            return True
+    return False
+
+
+def detect_git_repos(root_dir: str) -> dict[str, dict]:
+    """Detect all .git directories under root_dir recursively."""
+    import subprocess
+
+    root = Path(root_dir)
+    repo_map = {}
+
+    for git_dir in root.rglob(".git"):
+        if not git_dir.is_dir():
+            continue
+
+        repo_path = str(git_dir.parent.absolute())
+
+        result = {
+            "path": repo_path,
+            "url": None,
+            "branch": None,
+            "commit": None,
+        }
+
+        try:
+            remote = subprocess.run(
+                ["git", "remote", "get-url", "origin"],
+                cwd=repo_path,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if remote.returncode == 0:
+                result["url"] = remote.stdout.strip()
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
+
+        try:
+            branch = subprocess.run(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                cwd=repo_path,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if branch.returncode == 0:
+                result["branch"] = branch.stdout.strip()
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
+
+        try:
+            commit = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=repo_path,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if commit.returncode == 0:
+                result["commit"] = commit.stdout.strip()[:12]
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
+
+        repo_map[repo_path] = result
+
+    return repo_map
+
+
+def get_repo_for_file(filepath: str, repo_map: dict[str, dict]) -> str | None:
+    """Map a file path to its parent git repo's remote URL."""
+    filepath_path = Path(filepath).absolute()
+
+    for repo_path, repo_info in repo_map.items():
+        try:
+            repo_abs = Path(repo_path).absolute()
+            if filepath_path.is_relative_to(repo_abs):
+                return repo_info.get("url")
+        except ValueError:
+            continue
+
+    return None
+
 
 def get_key():
     """Get a single keypress from the user."""

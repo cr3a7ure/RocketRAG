@@ -3,6 +3,7 @@ from pathlib import Path
 from kreuzberg import extract_file_sync, ExtractionConfig
 from .data_models import Document
 from .base import BaseLoader
+from .utils import DEFAULT_IGNORE_DIRS
 
 
 IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "tiff", "bmp", "gif", "webp"}
@@ -234,6 +235,8 @@ class KreuzbergLoader(BaseLoader):
                     continue
                 files.append((entry, relative_path))
             elif entry.is_dir():
+                if entry.name in DEFAULT_IGNORE_DIRS or entry.name.startswith("."):
+                    continue
                 subdir_ignore = entry / ".gitignore"
                 child_patterns = set()
                 if subdir_ignore.exists():

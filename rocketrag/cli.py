@@ -440,6 +440,7 @@ def search(
         '{"model_name": "minishlab/potion-multilingual-128M"}',
         help="JSON string with vectorizer configuration",
     ),
+    filter: str = typer.Option(None, help="Milvus filter expression (e.g., 'source like \"%auth%\"')"),
 ):
     """Search the vector database for relevant chunks."""
     imports = _lazy_imports()
@@ -455,7 +456,7 @@ def search(
         vectorizer=vectorizer,
     )
 
-    results = db.search(query, top_k=top_k)
+    results = db.search(query, top_k=top_k, filter=filter)
     console = Console()
 
     if not results:
@@ -466,11 +467,13 @@ def search(
     table = Table(title=f"Search results for: {query}")
     table.add_column("Score", style="green", width=10)
     table.add_column("File", style="cyan")
+    table.add_column("Source", style="magenta", width=20)
     table.add_column("Chunk", style="white")
 
     for r in results:
         chunk_preview = r.chunk[:100] + "..." if len(r.chunk) > 100 else r.chunk
-        table.add_row(f"{r.score:.4f}", r.filename, chunk_preview)
+        source_preview = r.source[:40] + "..." if r.source and len(r.source) > 40 else (r.source or "")
+        table.add_row(f"{r.score:.4f}", r.filename, source_preview, chunk_preview)
 
     console.print(table)
 

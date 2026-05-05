@@ -64,7 +64,16 @@ class MilvusLiteDB:
                 collection_name=self.collection_name,
                 dimension=self.dimension,
                 id_type="string",
-                max_length=64,  # SHA-256 hash is 64 characters
+                max_length=64,
+                vector_field="vector",
+                fields=[
+                    {"name": "id", "dtype": "string", "max_length": 64, "is_primary": True},
+                    {"name": "vector", "dtype": "float32", "dim": self.dimension},
+                    {"name": "text", "dtype": "string", "max_length": 65535},
+                    {"name": "filename", "dtype": "string", "max_length": 512},
+                    {"name": "language", "dtype": "string", "max_length": 32},
+                    {"name": "source", "dtype": "string", "max_length": 512},
+                ],
             )
             self._save_metadata(self.metadata)
         elif self.metadata:
@@ -206,6 +215,7 @@ class MilvusLiteDB:
                     "text": new_chunks[i],
                     "filename": doc.filename,
                     "language": doc.language if hasattr(doc, 'language') and doc.language else "",
+                    "source": doc.source if hasattr(doc, 'source') and doc.source else "",
                 }
                 for i in range(len(new_chunks))
             ]
@@ -213,22 +223,26 @@ class MilvusLiteDB:
             self.client.insert(collection_name=self.collection_name, data=data)
             print(f"Successfully added {len(new_chunks)} chunks to the collection.")
 
-    def search(self, query: str, top_k: int = 5, collection_name: str | None = None) -> list[SearchResult]:
+    def search(self, query: str, top_k: int = 5, collection_name: str | None = None, filter: str | None = None) -> list[SearchResult]:
         query_vector = self.vectorizer.vectorize(query)
         target_collection = collection_name if collection_name else self.collection_name
-        results = self.client.search(
-            collection_name=target_collection,
-            data=[query_vector],
-            limit=top_k,
-            output_fields=["text", "filename", "language"],
-            anns_field="vector",
-        )
+        search_params = {
+            "collection_name": target_collection,
+            "data": [query_vector],
+            "limit": top_k,
+            "output_fields": ["text", "filename", "language", "source"],
+            "anns_field": "vector",
+        }
+        if filter:
+            search_params["filter"] = filter
+        results = self.client.search(**search_params)
         results = [
             SearchResult(
                 chunk=result["entity"]["text"],
                 filename=result["entity"]["filename"],
                 score=result["distance"],
                 language=result["entity"].get("language", ""),
+                source=result["entity"].get("source", ""),
             )
             for result in results[0]
         ]
