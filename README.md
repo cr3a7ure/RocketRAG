@@ -70,8 +70,9 @@ rocketrag prepare --data-dir ./documents --dry-run
 # Incremental index (only changed files)
 rocketrag prepare --data-dir ./documents --incremental
 
-# Search the vector database
-rocketrag search "query" --collection-name localdev --top-k 5
+# Search the vector database with metadata filtering
+rocketrag search "jwt" --collection-name localdev --top-k 5
+rocketrag search "auth" --filter 'source like "%auth%"' --top-k 5
 
 # List indexed files
 rocketrag list-files --db-path rag.db
@@ -329,6 +330,9 @@ print(result["sources"])
 - 📝 **Metadata preservation** throughout the pipeline
 - 🎯 **Context-aware chunking** for better retrieval
 - 🔌 **MCP server** for AI agent integration
+- 🗂️ **Multi-repo source tracking** with git remote URL metadata
+- 🚫 **Automatic directory filtering** (skips node_modules, dist, venv, .git, etc.)
+- 🔍 **Metadata filtering** in search results
 
 ## 🤖 MCP Server
 
