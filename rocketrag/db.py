@@ -60,21 +60,22 @@ class MilvusLiteDB:
     def create_collection_if_not_exists(self, recreate: bool = False):
         if not self.client.has_collection(self.collection_name):
             print("Creating collection")
+            from pymilvus import CollectionSchema, FieldSchema, DataType
+            schema = CollectionSchema(
+                fields=[
+                    FieldSchema(name="id", dtype=DataType.VARCHAR, max_length=64, is_primary=True),
+                    FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=self.dimension),
+                    FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=65535),
+                    FieldSchema(name="filename", dtype=DataType.VARCHAR, max_length=512),
+                    FieldSchema(name="language", dtype=DataType.VARCHAR, max_length=32),
+                    FieldSchema(name="source", dtype=DataType.VARCHAR, max_length=512),
+                    FieldSchema(name="project_name", dtype=DataType.VARCHAR, max_length=256),
+                ],
+                description="RocketRAG vector database",
+            )
             self.client.create_collection(
                 collection_name=self.collection_name,
-                dimension=self.dimension,
-                id_type="string",
-                max_length=64,
-                vector_field="vector",
-                fields=[
-                    {"name": "id", "dtype": "string", "max_length": 64, "is_primary": True},
-                    {"name": "vector", "dtype": "float32", "dim": self.dimension},
-                    {"name": "text", "dtype": "string", "max_length": 65535},
-                    {"name": "filename", "dtype": "string", "max_length": 512},
-                    {"name": "language", "dtype": "string", "max_length": 32},
-                    {"name": "source", "dtype": "string", "max_length": 512},
-                    {"name": "project_name", "dtype": "string", "max_length": 256},
-                ],
+                schema=schema,
             )
             self._save_metadata(self.metadata)
         elif self.metadata:
