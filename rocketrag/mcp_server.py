@@ -10,15 +10,44 @@ def create_mcp_server(
     vectorizer_args: dict,
     host: str = "127.0.0.1",
     port: int = 8000,
+    library_db_path: str = None,
 ):
-    """Create an MCP server for querying the RocketRAG database."""
+    """Create an MCP server for querying the RocketRAG database.
+
+    Supports two databases:
+    - Local DB (db_path): User's own ingested codebase
+    - Library DB (library_db_path): Pre-ingested company/library documentation
+
+    All search tools query both databases and return merged results with
+    an 'origin' field indicating 'local' or 'library'.
+
+    Args:
+        db_path: Path to local user's database
+        collection_name: Collection name for local database
+        vectorizer_args: Vectorizer configuration
+        host: HTTP host for server
+        port: HTTP port for server
+        library_db_path: Optional path to library/company documentation database
+    """
     vectorizer = init_vectorizer("sentence_transformers", **vectorizer_args)
 
-    db = MilvusLiteDB(
+    local_db = MilvusLiteDB(
         db_path=db_path,
         collection_name=collection_name,
         vectorizer=vectorizer,
     )
+
+    library_db = None
+    if library_db_path:
+        library_db = MilvusLiteDB(
+            db_path=library_db_path,
+            collection_name=collection_name,
+            vectorizer=vectorizer,
+        )
+
+    databases = {"local": local_db}
+    if library_db:
+        databases["library"] = library_db
 
     mcp = FastMCP(
         "RocketRAG Query Server",
@@ -27,20 +56,40 @@ def create_mcp_server(
         streamable_http_path="/mcp",
     )
 
+    def _search_db(db_instance, query, top_k, filter_expr):
+        """Helper to search a single database and tag results."""
+        results = db_instance.search(query, top_k=top_k, filter=filter_expr)
+        return [
+            {
+                "chunk": r.chunk,
+                "filename": r.filename,
+                "score": r.score,
+                "source": r.source or "",
+                "language": r.language or "",
+                "project_name": r.project_name or "",
+            }
+            for r in results
+        ]
+
     @mcp.tool()
     def quick_search(project_path: str, query: str, top_k: int = 5) -> list[dict]:
-        """Search with project context - auto-resolves dependencies and filters.
+        """Search with project context - auto-resolves dependencies from both local and library databases.
 
-        Reads package.json, pyproject.toml, etc. from project_path to discover
-        the project and its dependencies, then filters search to those packages.
+        Reads package.json, pyproject.toml from project_path to discover the project
+        and its dependencies, then searches BOTH your local database AND the library
+        database, filtering to matching projects.
+
+        Results are merged and sorted by score, with an 'origin' field showing
+        'local' (your codebase) or 'library' (company docs).
 
         Args:
-            project_path: Path to local project (reads package.json, pyproject.toml, etc.)
+            project_path: Path to your local project (reads package.json, pyproject.toml)
             query: The search query text
             top_k: Number of results to return (default: 5)
 
         Returns:
-            List of search results from project and its dependencies
+            List of search results from project and its dependencies in both databases.
+            Each result includes an 'origin' field: 'local' or 'library'.
         """
         try:
             from .utils import get_project_name
@@ -80,55 +129,64 @@ def create_mcp_server(
                 project_names.append(get_project_name(str(path)) or path.name)
 
             filter_expr = f'project_name in {project_names}'
-            results = db.search(query, top_k=top_k, filter=filter_expr)
-            return [
-                {
-                    "chunk": r.chunk,
-                    "filename": r.filename,
-                    "score": r.score,
-                    "source": r.source or "",
-                    "language": r.language or "",
-                    "project_name": r.project_name or "",
-                }
-                for r in results
-            ]
+
+            all_results = []
+            for label, db_instance in databases.items():
+                try:
+                    results = _search_db(db_instance, query, top_k, filter_expr)
+                    for r in results:
+                        r["origin"] = label
+                    all_results.extend(results)
+                except Exception:
+                    continue
+
+            all_results.sort(key=lambda x: x["score"], reverse=True)
+            return all_results[:top_k]
         except Exception as e:
             return [{"error": str(e), "results": []}]
 
     @mcp.tool()
     def deep_search(query: str, top_k: int = 5, collection_name: str = None, filter: str = None) -> list[dict]:
-        """Full-depth search without project filtering - searches everything.
+        """Full-depth search across both local and library databases - no project filtering.
 
-        Use this for exploratory search or when you want results from all projects.
+        Use this for exploratory search when you want results from ALL indexed content
+        in both your local database and the library database.
+
+        Results are merged and sorted by score, with an 'origin' field showing
+        'local' or 'library'.
 
         Args:
             query: The search query text
             top_k: Number of results to return (default: 5)
-            collection_name: Specific collection to search (default: search default)
+            collection_name: Specific collection to search (default: searches all)
             filter: Optional Milvus filter expression for additional filtering
 
         Returns:
-            List of search results with chunk, filename, score, source, language, project_name
+            List of all search results from both databases.
+            Each result includes an 'origin' field: 'local' or 'library'.
         """
         try:
-            results = db.search(query, top_k=top_k, collection_name=collection_name, filter=filter)
-            return [
-                {
-                    "chunk": r.chunk,
-                    "filename": r.filename,
-                    "score": r.score,
-                    "source": r.source or "",
-                    "language": r.language or "",
-                    "project_name": r.project_name or "",
-                }
-                for r in results
-            ]
+            all_results = []
+            for label, db_instance in databases.items():
+                try:
+                    results = _search_db(db_instance, query, top_k, filter)
+                    for r in results:
+                        r["origin"] = label
+                    all_results.extend(results)
+                except Exception:
+                    continue
+
+            all_results.sort(key=lambda x: x["score"], reverse=True)
+            return all_results[:top_k]
         except Exception as e:
             return [{"error": str(e), "results": []}]
 
     @mcp.tool()
     def search_all(query: str, top_k: int = 5, filter: str = None) -> list[dict]:
-        """Search ALL collections in the database for relevant chunks.
+        """Search ALL collections in all databases for relevant chunks.
+
+        Searches both local and library databases, merging results and sorting by score.
+        Each result includes an 'origin' field showing 'local' or 'library'.
 
         Args:
             query: The search query text
@@ -136,99 +194,148 @@ def create_mcp_server(
             filter: Milvus filter expression (e.g., 'source like "%auth%"')
 
         Returns:
-            List of search results with chunk text, filename, score, and source
+            List of search results with chunk text, filename, score, source, and origin.
+            Each result includes an 'origin' field: 'local' or 'library'.
         """
         try:
-            results = db.search_all(query, top_k=top_k)
-            return [
-                {
-                    "chunk": r.chunk,
-                    "filename": r.filename,
-                    "score": r.score,
-                    "source": r.source or "",
-                    "language": r.language or "",
-                    "project_name": r.project_name or "",
-                }
-                for r in results
-            ]
+            all_results = []
+            for label, db_instance in databases.items():
+                try:
+                    results = _search_db(db_instance, query, top_k, filter)
+                    for r in results:
+                        r["origin"] = label
+                    all_results.extend(results)
+                except Exception:
+                    continue
+
+            all_results.sort(key=lambda x: x["score"], reverse=True)
+            return all_results[:top_k]
         except Exception as e:
             return [{"error": str(e), "results": []}]
 
     @mcp.tool()
     def list_files() -> list[str]:
-        """List all unique filenames indexed in the database.
+        """List all unique filenames indexed in all databases.
 
         Returns:
-            List of unique filenames
+            List of unique filenames from all databases
         """
         try:
-            return db.get_unique_filenames()
+            all_files = set()
+            for label, db_instance in databases.items():
+                try:
+                    files = db_instance.get_unique_filenames()
+                    all_files.update(files)
+                except Exception:
+                    continue
+            return sorted(list(all_files))
         except Exception as e:
             return [f"error: {str(e)}"]
 
     @mcp.tool()
     def get_file_chunks(filename: str) -> list[dict]:
-        """Get all chunks from a specific file.
+        """Get all chunks from a specific file across all databases.
 
         Args:
             filename: The filename to retrieve chunks for
 
         Returns:
-            List of chunks with text and id
+            List of chunks with text and id from all databases
         """
         try:
-            results = db.get_vectors_by_filename(filename)
+            all_chunks = []
+            for label, db_instance in databases.items():
+                try:
+                    results = db_instance.get_vectors_by_filename(filename)
+                    for r in results:
+                        r["origin"] = label
+                        all_chunks.append(r)
+                except Exception:
+                    continue
             return [
                 {
                     "id": r["id"],
                     "text": r["text"],
+                    "origin": r.get("origin", "unknown"),
                 }
-                for r in results
+                for r in all_chunks
             ]
         except Exception as e:
             return [{"error": str(e)}]
 
     @mcp.tool()
     def get_stats() -> dict:
-        """Get database statistics.
+        """Get aggregated database statistics from all databases.
 
         Returns:
-            Dictionary with total_chunks, unique_files, dimension, and vectorizer_model
+            Dictionary with total_chunks, unique_files, databases, and per-database stats
         """
         try:
-            total = db.get_total_count()
-            files = db.get_unique_filenames()
-            metadata = db.get_collection_metadata()
+            total = 0
+            all_files = set()
+            dimensions = set()
+            models = set()
+            db_stats = []
+
+            for label, db_instance in databases.items():
+                try:
+                    db_total = db_instance.get_total_count()
+                    db_files = db_instance.get_unique_filenames()
+                    db_meta = db_instance.get_collection_metadata()
+                    db_dim = db_instance.dimension
+
+                    total += db_total
+                    all_files.update(db_files)
+                    dimensions.add(db_dim)
+                    models.add(db_meta.get("vectorizer_args", {}).get("model_name", "unknown"))
+
+                    db_stats.append({
+                        "name": label,
+                        "chunks": db_total,
+                        "files": len(db_files),
+                        "dimension": db_dim,
+                        "model": db_meta.get("vectorizer_args", {}).get("model_name", "unknown"),
+                    })
+                except Exception:
+                    continue
 
             return {
                 "total_chunks": total,
-                "unique_files": len(files),
-                "dimension": db.dimension,
-                "vectorizer_model": metadata.get("vectorizer_args", {}).get("model_name", "unknown"),
+                "unique_files": len(all_files),
+                "databases": db_stats,
             }
         except Exception as e:
             return {"error": str(e)}
 
     @mcp.tool()
     def get_all_chunks(limit: int = 100, offset: int = 0) -> list[dict]:
-        """Get all chunks with pagination.
+        """Get all chunks with pagination from all databases.
 
         Args:
             limit: Maximum number of chunks to return (default: 100)
             offset: Number of chunks to skip (default: 0)
 
         Returns:
-            List of chunks with text and filename
+            List of chunks with text and filename from all databases
         """
         try:
-            results = db.get_all_records(limit=limit, offset=offset)
+            all_chunks = []
+            for label, db_instance in databases.items():
+                try:
+                    results = db_instance.get_all_records(limit=limit, offset=offset)
+                    for r in results:
+                        r["origin"] = label
+                        all_chunks.append(r)
+                except Exception:
+                    continue
             return [
                 {
                     "id": r["id"],
                     "text": r["text"],
                     "filename": r["filename"],
+                    "origin": r.get("origin", "unknown"),
                 }
-                for r in results
+                for r in all_chunks
             ]
         except Exception as e:
             return [{"error": str(e)}]
@@ -262,8 +369,8 @@ def create_mcp_server(
             from .vectors import init_vectorizer
             from .utils import construct_metadata_dict, get_git_repo_info, get_project_name
 
-            target_db_path = db_path if db_path else db.db_path
-            target_collection = collection_name or db.collection_name
+            target_db_path = db_path if db_path else databases["local"].db_path
+            target_collection = collection_name or databases["local"].collection_name
 
             loader = init_loader("kreuzberg", max_workers=max_workers)
             chunker = init_chonker("chonkie", method="semantic", chunk_size=512)
@@ -330,18 +437,18 @@ def create_mcp_server(
     return mcp
 
 
-def run_stdio(db_path: str, collection_name: str, vectorizer_args: dict):
+def run_stdio(db_path: str, collection_name: str, vectorizer_args: dict, library_db_path: str = None):
     """Run MCP server with stdio transport."""
-    mcp = create_mcp_server(db_path, collection_name, vectorizer_args)
+    mcp = create_mcp_server(db_path, collection_name, vectorizer_args, library_db_path=library_db_path)
     mcp.run(transport="stdio")
 
 
-def run_http(db_path: str, collection_name: str, vectorizer_args: dict, host: str = "127.0.0.1", port: int = 8000):
+def run_http(db_path: str, collection_name: str, vectorizer_args: dict, host: str = "127.0.0.1", port: int = 8000, library_db_path: str = None):
     """Run MCP server with HTTP transport via SSE."""
     import uvicorn
     from fastapi import FastAPI
 
-    mcp = create_mcp_server(db_path, collection_name, vectorizer_args, host=host, port=port)
+    mcp = create_mcp_server(db_path, collection_name, vectorizer_args, host=host, port=port, library_db_path=library_db_path)
     sse_app = mcp.sse_app()
 
     app = FastAPI(title="RocketRAG MCP Server")
@@ -366,7 +473,8 @@ def main():
     import os
 
     parser = argparse.ArgumentParser(description="RocketRAG MCP Server")
-    parser.add_argument("--db-path", default="rag.db", help="Path to the database file")
+    parser.add_argument("--db-path", default="rag.db", help="Path to local user's database")
+    parser.add_argument("--library-db-path", default=None, help="Path to library/company documentation database")
     parser.add_argument("--collection-name", default="rag", help="Name of the collection")
     parser.add_argument(
         "--vectorizer-args",
@@ -383,9 +491,9 @@ def main():
     os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
 
     if args.transport == "http":
-        run_http(args.db_path, args.collection_name, vectorizer_args, args.host, args.port)
+        run_http(args.db_path, args.collection_name, vectorizer_args, args.host, args.port, args.library_db_path)
     else:
-        run_stdio(args.db_path, args.collection_name, vectorizer_args)
+        run_stdio(args.db_path, args.collection_name, vectorizer_args, args.library_db_path)
 
 
 if __name__ == "__main__":

@@ -339,33 +339,49 @@ print(result["sources"])
 
 RocketRAG includes an MCP (Model Context Protocol) server for integration with AI agents. Supports both **stdio** (local) and **HTTP** (remote) transports.
 
+### Dual-Database Support
+
+The MCP server supports searching across **two databases simultaneously**:
+
+- **Local database** (`--db-path`): Your personal/local project documentation
+- **Library database** (`--library-db-path`): Shared company or library documentation
+
+All search results include an `origin` field: `"local"` or `"library"` to identify the source.
+
 ### Stdio Transport (Local)
 
 ```bash
 # Start MCP server with stdio transport
 rocketrag mcp-server
 
-# Or with custom settings
+# With local database
 rocketrag mcp-server --db-path ./rag.db --collection-name docs
+
+# With dual-database support (local + library)
+rocketrag mcp-server \
+  --db-path ./my-project/rag.db \
+  --library-db-path ./company-docs/library.db
 ```
 
 ### HTTP Transport (Remote)
 
 ```bash
 # Start MCP server with HTTP transport on custom port
-rocketrag mcp-server --transport http --host 0.0.0.0 --port 8000 --db-path ./rag.db --collection-name docs
+rocketrag mcp-server --transport http --host 0.0.0.0 --port 8000 \
+  --db-path ./rag.db \
+  --library-db-path ./company-docs/library.db
 
 # With e5-base-v2 embeddings
 rocketrag mcp-server --transport http --host 0.0.0.0 --port 8000 \
   --db-path ./rag.db \
-  --collection-name docs \
+  --library-db-path ./company-docs/library.db \
   --vectorizer-args '{"model_name": "intfloat/e5-base-v2"}'
 
 # With Qwen text-embedding-v4 (1024 dimensions)
 export DASHSCOPE_API_KEY="your-api-key"
 rocketrag mcp-server --transport http --host 0.0.0.0 --port 8000 \
   --db-path ./rag.db \
-  --collection-name docs \
+  --library-db-path ./company-docs/library.db \
   --vectorizer-args '{"model_name": "text-embedding-v4"}'
 ```
 
@@ -374,12 +390,12 @@ rocketrag mcp-server --transport http --host 0.0.0.0 --port 8000 \
 | Tool | Description |
 |------|-------------|
 | `quick_search(project_path, query, top_k)` | Project-aware search (auto-resolves deps from package.json/pyproject.toml) |
-| `deep_search(query, top_k, filter)` | Full search without project filtering - exploratory mode |
-| `search_all(query, top_k, filter)` | Search all collections |
-| `list_files()` | List all indexed filenames |
-| `get_file_chunks(filename)` | Get all chunks from a specific file |
-| `get_stats()` | Get database statistics |
-| `get_all_chunks(limit, offset)` | Paginated chunk retrieval |
+| `deep_search(query, top_k, filter)` | Full search across both databases without project filtering |
+| `search_all(query, top_k, filter)` | Search all collections from both databases |
+| `list_files()` | List all indexed filenames from both databases |
+| `get_file_chunks(filename)` | Get all chunks from a specific file (includes `origin` field) |
+| `get_stats()` | Get aggregated statistics from all databases |
+| `get_all_chunks(limit, offset)` | Paginated chunk retrieval from all databases |
 | `ingest_directory(directory, collection_name, db_path)` | Ingest a directory (optionally to separate DB) |
 
 ### HTTP Endpoints

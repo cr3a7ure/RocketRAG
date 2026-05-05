@@ -409,7 +409,8 @@ def visualize(
 
 @app.command()
 def mcp_server(
-    db_path: str = typer.Option("rag.db", help="Path to the database file"),
+    db_path: str = typer.Option("rag.db", help="Path to local user's database"),
+    library_db_path: str = typer.Option(None, help="Path to library/company documentation database"),
     collection_name: str = typer.Option("rag", help="Name of the collection"),
     vectorizer_args: str = typer.Option(
         '{"model_name": "minishlab/potion-multilingual-128M"}',
@@ -425,9 +426,9 @@ def mcp_server(
     vectorizer_args_dict = json.loads(vectorizer_args)
 
     if transport == "http":
-        run_http(db_path, collection_name, vectorizer_args_dict, host, port)
+        run_http(db_path, collection_name, vectorizer_args_dict, host, port, library_db_path)
     else:
-        run_stdio(db_path, collection_name, vectorizer_args_dict)
+        run_stdio(db_path, collection_name, vectorizer_args_dict, library_db_path)
 
 
 @app.command()
