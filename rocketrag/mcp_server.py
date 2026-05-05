@@ -240,15 +240,18 @@ def create_mcp_server(
         max_workers: int = 4,
         incremental: bool = True,
         recreate: bool = False,
+        db_path: str = None,
     ) -> dict:
         """Ingest a directory of documents into the vector database.
 
         Args:
             directory: Path to the directory to ingest
-            collection_name: Name of the collection (default: server's collection)
+            collection_name: Name of the collection (default: localdev)
             max_workers: Number of parallel workers for extraction (default: 4)
             incremental: Only index changed files (default: True)
             recreate: Recreate collection before ingesting (default: False)
+            db_path: Optional path to a separate database file for project-local storage.
+                    If not provided, uses the server's default database.
 
         Returns:
             Dictionary with status, files_processed, and chunks_added
@@ -259,6 +262,7 @@ def create_mcp_server(
             from .vectors import init_vectorizer
             from .utils import construct_metadata_dict, get_git_repo_info, get_project_name
 
+            target_db_path = db_path if db_path else db.db_path
             target_collection = collection_name or db.collection_name
 
             loader = init_loader("kreuzberg", max_workers=max_workers)
@@ -271,12 +275,12 @@ def create_mcp_server(
             git_repo_info = get_git_repo_info(directory)
             project_name = get_project_name(directory)
             metadata = construct_metadata_dict(
-                directory, chunker, chunker.config, vectorizer, vectorizer.config, loader, loader.config, db_path, target_collection, git_repo_info=git_repo_info
+                directory, chunker, chunker.config, vectorizer, vectorizer.config, loader, loader.config, target_db_path, target_collection, git_repo_info=git_repo_info
             )
 
             from .db import MilvusLiteDB
             target_db = MilvusLiteDB(
-                db_path=db_path,
+                db_path=target_db_path,
                 collection_name=target_collection,
                 vectorizer=vectorizer,
                 chunker=chunker,

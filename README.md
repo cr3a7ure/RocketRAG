@@ -380,7 +380,7 @@ rocketrag mcp-server --transport http --host 0.0.0.0 --port 8000 \
 | `get_file_chunks(filename)` | Get all chunks from a specific file |
 | `get_stats()` | Get database statistics |
 | `get_all_chunks(limit, offset)` | Paginated chunk retrieval |
-| `ingest_directory(directory, ...)` | Ingest a directory into the vector database |
+| `ingest_directory(directory, collection_name, db_path)` | Ingest a directory (optionally to separate DB) |
 
 ### HTTP Endpoints
 
