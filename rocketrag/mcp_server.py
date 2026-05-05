@@ -34,10 +34,10 @@ def create_mcp_server(
             query: The search query text
             top_k: Number of results to return (default: 5)
             collection_name: Specific collection to search (default: search default)
-            filter: Milvus filter expression (e.g., 'source like "%auth%"')
+            filter: Milvus filter expression (e.g., 'project_name == "auth-service"')
 
         Returns:
-            List of search results with chunk text, filename, score, and source
+            List of search results with chunk, filename, score, source, language, project_name
         """
         try:
             results = db.search(query, top_k=top_k, collection_name=collection_name, filter=filter)
@@ -48,6 +48,7 @@ def create_mcp_server(
                     "score": r.score,
                     "source": r.source or "",
                     "language": r.language or "",
+                    "project_name": r.project_name or "",
                 }
                 for r in results
             ]
@@ -75,6 +76,7 @@ def create_mcp_server(
                     "score": r.score,
                     "source": r.source or "",
                     "language": r.language or "",
+                    "project_name": r.project_name or "",
                 }
                 for r in results
             ]
@@ -184,7 +186,7 @@ def create_mcp_server(
             from .loaders import init_loader
             from .chonk import init_chonker
             from .vectors import init_vectorizer
-            from .utils import construct_metadata_dict, get_git_repo_info
+            from .utils import construct_metadata_dict, get_git_repo_info, get_project_name
 
             target_collection = collection_name or db.collection_name
 
@@ -196,6 +198,7 @@ def create_mcp_server(
             )
 
             git_repo_info = get_git_repo_info(directory)
+            project_name = get_project_name(directory)
             metadata = construct_metadata_dict(
                 directory, chunker, chunker.config, vectorizer, vectorizer.config, loader, loader.config, db_path, target_collection, git_repo_info=git_repo_info
             )
@@ -210,6 +213,8 @@ def create_mcp_server(
             )
 
             documents = loader.load_files_from_dir(directory)
+            for doc in documents:
+                doc.project_name = project_name
             files_processed = len(documents)
 
             if incremental:

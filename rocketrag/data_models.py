@@ -9,9 +9,10 @@ class Document:
     chunks: list[str] = field(default_factory=list)
     language: Optional[str] = None
     filepath: Optional[str] = None
-    mtime: Optional[float] = None  # file modification time
-    size: Optional[int] = None  # file size in bytes
-    source: Optional[str] = None  # git repo URL or identifier
+    mtime: Optional[float] = None
+    size: Optional[int] = None
+    source: Optional[str] = None
+    project_name: Optional[str] = None
 
 
 @dataclass
@@ -21,4 +22,5 @@ class SearchResult:
     score: float
     language: Optional[str] = None
     filepath: Optional[str] = None
-    source: Optional[str] = None  # git repo URL or identifier
+    source: Optional[str] = None
+    project_name: Optional[str] = None

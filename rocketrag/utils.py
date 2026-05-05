@@ -106,6 +106,42 @@ def get_repo_for_file(filepath: str, repo_map: dict[str, dict]) -> str | None:
     return None
 
 
+def get_project_name(directory: str) -> str | None:
+    """Extract project/package name from a directory.
+
+    Checks in order: package.json (name), pyproject.toml (project.name),
+    then falls back to directory name.
+    """
+    import json
+
+    path = Path(directory)
+
+    pkg_json = path / "package.json"
+    if pkg_json.exists():
+        try:
+            with open(pkg_json) as f:
+                data = json.load(f)
+                if data.get("name"):
+                    return data["name"]
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    pyproject = path / "pyproject.toml"
+    if pyproject.exists():
+        try:
+            import tomllib
+            with open(pyproject, "rb") as f:
+                data = tomllib.load(f)
+                if "project" in data and data["project"].get("name"):
+                    return data["project"]["name"]
+                if "tool" in data and data["tool"].get("poetry", {}).get("name"):
+                    return data["tool"]["poetry"]["name"]
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    return path.name
+
+
 def get_key():
     """Get a single keypress from the user."""
     fd = sys.stdin.fileno()

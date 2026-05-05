@@ -73,6 +73,7 @@ class MilvusLiteDB:
                     {"name": "filename", "dtype": "string", "max_length": 512},
                     {"name": "language", "dtype": "string", "max_length": 32},
                     {"name": "source", "dtype": "string", "max_length": 512},
+                    {"name": "project_name", "dtype": "string", "max_length": 256},
                 ],
             )
             self._save_metadata(self.metadata)
@@ -216,6 +217,7 @@ class MilvusLiteDB:
                     "filename": doc.filename,
                     "language": doc.language if hasattr(doc, 'language') and doc.language else "",
                     "source": doc.source if hasattr(doc, 'source') and doc.source else "",
+                    "project_name": doc.project_name if hasattr(doc, 'project_name') and doc.project_name else "",
                 }
                 for i in range(len(new_chunks))
             ]
@@ -230,7 +232,7 @@ class MilvusLiteDB:
             "collection_name": target_collection,
             "data": [query_vector],
             "limit": top_k,
-            "output_fields": ["text", "filename", "language", "source"],
+            "output_fields": ["text", "filename", "language", "source", "project_name"],
             "anns_field": "vector",
         }
         if filter:
@@ -243,6 +245,7 @@ class MilvusLiteDB:
                 score=result["distance"],
                 language=result["entity"].get("language", ""),
                 source=result["entity"].get("source", ""),
+                project_name=result["entity"].get("project_name", ""),
             )
             for result in results[0]
         ]

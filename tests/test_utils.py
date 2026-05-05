@@ -15,6 +15,7 @@ from rocketrag.utils import (
     should_ignore_path,
     detect_git_repos,
     get_repo_for_file,
+    get_project_name,
 )
 
 
@@ -477,3 +478,36 @@ class TestGetRepoForFile:
         }
         result = get_repo_for_file("/path/to/repo/nested/src/main.py", repo_map)
         assert result == "https://github.com/user/nested"
+
+
+class TestGetProjectName:
+    def test_returns_name_from_package_json(self, temp_dir):
+        pkg_dir = Path(temp_dir) / "npm_project"
+        pkg_dir.mkdir()
+        (pkg_dir / "package.json").write_text('{"name": "@company/ui"}')
+
+        result = get_project_name(str(pkg_dir))
+        assert result == "@company/ui"
+
+    def test_returns_name_from_pyproject_toml(self, temp_dir):
+        pkg_dir = Path(temp_dir) / "python_project"
+        pkg_dir.mkdir()
+        (pkg_dir / "pyproject.toml").write_text('[project]\nname = "my-pkg"\n')
+
+        result = get_project_name(str(pkg_dir))
+        assert result == "my-pkg"
+
+    def test_falls_back_to_dir_name(self, temp_dir):
+        pkg_dir = Path(temp_dir) / "some-random-dir"
+        pkg_dir.mkdir()
+
+        result = get_project_name(str(pkg_dir))
+        assert result == "some-random-dir"
+
+    def test_prefers_package_json_over_dir(self, temp_dir):
+        pkg_dir = Path(temp_dir) / "myproject"
+        pkg_dir.mkdir()
+        (pkg_dir / "package.json").write_text('{"name": "npm-pkg"}')
+
+        result = get_project_name(str(pkg_dir))
+        assert result == "npm-pkg"

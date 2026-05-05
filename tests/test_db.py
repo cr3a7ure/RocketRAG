@@ -125,3 +125,64 @@ class TestSearchWithFilter:
 
         sources = {r.source for r in results}
         assert len(sources) == 2
+
+
+class TestProjectNameField:
+    def test_add_document_with_project_name(self, db_instance):
+        doc = Document(
+            content="Auth service JWT implementation",
+            filename="auth.py",
+            project_name="auth-service",
+        )
+        db_instance.add_documents([doc])
+
+        results = db_instance.search("jwt", top_k=5)
+
+        assert len(results) >= 1
+        assert results[0].project_name == "auth-service"
+
+    def test_add_document_without_project_name(self, db_instance):
+        doc = Document(
+            content="Testing framework content",
+            filename="test.py",
+        )
+        db_instance.add_documents([doc])
+
+        results = db_instance.search("testing", top_k=5)
+
+        assert len(results) >= 1
+        assert results[0].project_name == ""
+
+    def test_search_with_project_name_filter(self, db_instance):
+        doc1 = Document(
+            content="JWT token auth",
+            filename="jwt.py",
+            project_name="auth-service",
+        )
+        doc2 = Document(
+            content="Gateway routing code",
+            filename="route.py",
+            project_name="gateway-service",
+        )
+        db_instance.add_documents([doc1, doc2])
+
+        results = db_instance.search("code", top_k=5, filter='project_name == "auth-service"')
+
+        assert len(results) >= 1
+        for r in results:
+            assert r.project_name == "auth-service"
+
+    def test_project_name_and_source_together(self, db_instance):
+        doc = Document(
+            content="OAuth implementation",
+            filename="oauth.py",
+            source="https://github.com/user/auth",
+            project_name="auth-service",
+        )
+        db_instance.add_documents([doc])
+
+        results = db_instance.search("oauth", top_k=5)
+
+        assert len(results) >= 1
+        assert results[0].source == "https://github.com/user/auth"
+        assert results[0].project_name == "auth-service"
