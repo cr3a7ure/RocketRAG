@@ -372,8 +372,9 @@ rocketrag mcp-server --transport http --host 0.0.0.0 --port 8000 \
 
 | Tool | Description |
 |------|-------------|
-| `search(query, top_k, filter)` | Vector similarity search with optional metadata filter |
-| `search_all(query, top_k, filter)` | Search all collections with optional filter |
+| `quick_search(project_path, query, top_k)` | Project-aware search (auto-resolves deps from package.json/pyproject.toml) |
+| `deep_search(query, top_k, filter)` | Full search without project filtering - exploratory mode |
+| `search_all(query, top_k, filter)` | Search all collections |
 | `list_files()` | List all indexed filenames |
 | `get_file_chunks(filename)` | Get all chunks from a specific file |
 | `get_stats()` | Get database statistics |

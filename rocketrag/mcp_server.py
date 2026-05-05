@@ -1,3 +1,4 @@
+from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 from .db import MilvusLiteDB
 from .vectors import init_vectorizer
@@ -27,14 +28,84 @@ def create_mcp_server(
     )
 
     @mcp.tool()
-    def search(query: str, top_k: int = 5, collection_name: str = None, filter: str = None) -> list[dict]:
-        """Search the database for relevant chunks.
+    def quick_search(project_path: str, query: str, top_k: int = 5) -> list[dict]:
+        """Search with project context - auto-resolves dependencies and filters.
+
+        Reads package.json, pyproject.toml, etc. from project_path to discover
+        the project and its dependencies, then filters search to those packages.
+
+        Args:
+            project_path: Path to local project (reads package.json, pyproject.toml, etc.)
+            query: The search query text
+            top_k: Number of results to return (default: 5)
+
+        Returns:
+            List of search results from project and its dependencies
+        """
+        try:
+            from .utils import get_project_name
+            import json
+
+            path = Path(project_path)
+            project_names = []
+
+            pkg_json = path / "package.json"
+            if pkg_json.exists():
+                try:
+                    with open(pkg_json) as f:
+                        data = json.load(f)
+                        if data.get("name"):
+                            project_names.append(data["name"])
+                        deps = data.get("dependencies", {})
+                        project_names.extend(deps.keys())
+                        dev_deps = data.get("devDependencies", {})
+                        project_names.extend(dev_deps.keys())
+                except (json.JSONDecodeError, OSError):
+                    pass
+
+            pyproject = path / "pyproject.toml"
+            if pyproject.exists():
+                try:
+                    import tomllib
+                    with open(pyproject, "rb") as f:
+                        data = tomllib.load(f)
+                        if "project" in data and data["project"].get("name"):
+                            project_names.append(data["project"]["name"])
+                        if "project" in data and data["project"].get("dependencies"):
+                            project_names.extend(data["project"]["dependencies"])
+                except (json.JSONDecodeError, OSError):
+                    pass
+
+            if not project_names:
+                project_names.append(get_project_name(str(path)) or path.name)
+
+            filter_expr = f'project_name in {project_names}'
+            results = db.search(query, top_k=top_k, filter=filter_expr)
+            return [
+                {
+                    "chunk": r.chunk,
+                    "filename": r.filename,
+                    "score": r.score,
+                    "source": r.source or "",
+                    "language": r.language or "",
+                    "project_name": r.project_name or "",
+                }
+                for r in results
+            ]
+        except Exception as e:
+            return [{"error": str(e), "results": []}]
+
+    @mcp.tool()
+    def deep_search(query: str, top_k: int = 5, collection_name: str = None, filter: str = None) -> list[dict]:
+        """Full-depth search without project filtering - searches everything.
+
+        Use this for exploratory search or when you want results from all projects.
 
         Args:
             query: The search query text
             top_k: Number of results to return (default: 5)
             collection_name: Specific collection to search (default: search default)
-            filter: Milvus filter expression (e.g., 'project_name == "auth-service"')
+            filter: Optional Milvus filter expression for additional filtering
 
         Returns:
             List of search results with chunk, filename, score, source, language, project_name
