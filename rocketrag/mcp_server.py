@@ -14,16 +14,16 @@ def create_mcp_server(
 ):
     """Create an MCP server for querying the RocketRAG database.
 
-    Supports two databases:
-    - Local DB (db_path): User's own ingested codebase
+    Supports dynamic local DB loading based on project path:
+    - Local DB: Auto-discovered from project root (project_path/rag.db)
     - Library DB (library_db_path): Pre-ingested company/library documentation
 
-    All search tools query both databases and return merged results with
+    All search tools query both databases (when available) and return merged results with
     an 'origin' field indicating 'local' or 'library'.
 
     Args:
-        db_path: Path to local user's database
-        collection_name: Collection name for local database
+        db_path: Default path for local database (used if no project_path specified)
+        collection_name: Collection name for databases
         vectorizer_args: Vectorizer configuration
         host: HTTP host for server
         port: HTTP port for server
@@ -31,23 +31,73 @@ def create_mcp_server(
     """
     vectorizer = init_vectorizer("sentence_transformers", **vectorizer_args)
 
-    local_db = MilvusLiteDB(
-        db_path=db_path,
-        collection_name=collection_name,
-        vectorizer=vectorizer,
-    )
+    _default_local_db_path = db_path
+    _default_collection_name = collection_name
+    _library_db = None
 
-    library_db = None
     if library_db_path:
-        library_db = MilvusLiteDB(
+        _library_db = MilvusLiteDB(
             db_path=library_db_path,
             collection_name=collection_name,
             vectorizer=vectorizer,
         )
 
-    databases = {"local": local_db}
-    if library_db:
-        databases["library"] = library_db
+    def _get_local_db(project_path: str = None):
+        """Get or create local DB for project_path.
+
+        Auto-discovers rag.db in project root. Caches DB instance for reuse.
+        If project_path is None, uses current working directory.
+
+        Args:
+            project_path: Path to project root (auto-discovers project_path/rag.db)
+
+        Returns:
+            MilvusLiteDB instance or None if no database found
+        """
+        # Use cwd if no project_path provided
+        target_path = Path(project_path) if project_path else Path.cwd()
+        db_file = target_path / "rag.db"
+
+        # Return None if no database file exists
+        if not db_file.exists():
+            return None
+
+        # Create cache key based on resolved path
+        cache_key = str(target_path.resolve())
+
+        # Check if we already have this DB loaded
+        if hasattr(_get_local_db, '_cache') and cache_key in _get_local_db._cache:
+            return _get_local_db._cache[cache_key]
+
+        # Initialize cache if needed
+        if not hasattr(_get_local_db, '_cache'):
+            _get_local_db._cache = {}
+
+        # Load and cache the database
+        local_db = MilvusLiteDB(
+            db_path=str(db_file),
+            collection_name=collection_name,
+            vectorizer=vectorizer,
+        )
+        _get_local_db._cache[cache_key] = local_db
+        return local_db
+
+    def _get_all_databases(project_path: str = None):
+        """Get all available databases for querying.
+
+        Args:
+            project_path: Optional project path for local DB discovery
+
+        Returns:
+            Dict of {label: db_instance} with 'local' and optionally 'library'
+        """
+        result = {}
+        local_db = _get_local_db(project_path)
+        if local_db:
+            result["local"] = local_db
+        if _library_db:
+            result["library"] = _library_db
+        return result
 
     mcp = FastMCP(
         "RocketRAG Query Server",
@@ -131,7 +181,7 @@ def create_mcp_server(
             filter_expr = f'project_name in {project_names}'
 
             all_results = []
-            for label, db_instance in databases.items():
+            for label, db_instance in _get_all_databases(project_path).items():
                 try:
                     results = _search_db(db_instance, query, top_k, filter_expr)
                     for r in results:
@@ -167,7 +217,7 @@ def create_mcp_server(
         """
         try:
             all_results = []
-            for label, db_instance in databases.items():
+            for label, db_instance in _get_all_databases().items():
                 try:
                     results = _search_db(db_instance, query, top_k, filter)
                     for r in results:
@@ -199,7 +249,7 @@ def create_mcp_server(
         """
         try:
             all_results = []
-            for label, db_instance in databases.items():
+            for label, db_instance in _get_all_databases().items():
                 try:
                     results = _search_db(db_instance, query, top_k, filter)
                     for r in results:
@@ -222,7 +272,7 @@ def create_mcp_server(
         """
         try:
             all_files = set()
-            for label, db_instance in databases.items():
+            for label, db_instance in _get_all_databases().items():
                 try:
                     files = db_instance.get_unique_filenames()
                     all_files.update(files)
@@ -244,7 +294,7 @@ def create_mcp_server(
         """
         try:
             all_chunks = []
-            for label, db_instance in databases.items():
+            for label, db_instance in _get_all_databases().items():
                 try:
                     results = db_instance.get_vectors_by_filename(filename)
                     for r in results:
@@ -277,7 +327,7 @@ def create_mcp_server(
             models = set()
             db_stats = []
 
-            for label, db_instance in databases.items():
+            for label, db_instance in _get_all_databases().items():
                 try:
                     db_total = db_instance.get_total_count()
                     db_files = db_instance.get_unique_filenames()
@@ -320,7 +370,7 @@ def create_mcp_server(
         """
         try:
             all_chunks = []
-            for label, db_instance in databases.items():
+            for label, db_instance in _get_all_databases().items():
                 try:
                     results = db_instance.get_all_records(limit=limit, offset=offset)
                     for r in results:
@@ -369,8 +419,8 @@ def create_mcp_server(
             from .vectors import init_vectorizer
             from .utils import construct_metadata_dict, get_git_repo_info, get_project_name
 
-            target_db_path = db_path if db_path else databases["local"].db_path
-            target_collection = collection_name or databases["local"].collection_name
+            target_db_path = db_path if db_path else str(Path(directory) / "rag.db")
+            target_collection = collection_name or _default_collection_name
 
             loader = init_loader("kreuzberg", max_workers=max_workers)
             chunker = init_chonker("chonkie", method="semantic", chunk_size=512)
